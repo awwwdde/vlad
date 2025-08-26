@@ -1,0 +1,86 @@
+.counter {
+  border: 2px solid #646cff;
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem 0;
+  background: linear-gradient(135deg, rgba(100, 108, 255, 0.1), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.counter h2 {
+  margin-top: 0;
+  color: #646cff;
+  font-size: 1.5rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.counter-display {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.counter-value {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #646cff;
+  display: inline-block;
+  min-width: 3rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.counter-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.counter-controls button {
+  padding: 0.8rem 1.5rem;
+  font-size: 1.1rem;
+  border-radius: 8px;
+  border: 2px solid #646cff;
+  background: rgba(100, 108, 255, 0.1);
+  color: #646cff;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+
+.counter-controls button:hover {
+  background: #646cff;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 108, 255, 0.3);
+}
+
+.counter-controls button:active {
+  transform: translateY(0);
+}
+
+.counter-history {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(100, 108, 255, 0.3);
+}
+
+.counter-history p {
+  font-size: 0.9rem;
+  color: #888;
+  text-align: center;
+  margin: 0;
+  word-break: break-all;
+}
+
+@media (prefers-color-scheme: light) {
+  .counter {
+    background: linear-gradient(135deg, rgba(100, 108, 255, 0.05), rgba(255, 255, 255, 0.8));
+    border-color: #646cff;
+  }
+  
+  .counter-controls button {
+    background: rgba(100, 108, 255, 0.05);
+  }
+}
