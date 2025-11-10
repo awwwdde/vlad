@@ -20,8 +20,14 @@ function Model({ url }: { url: string }) {
             if (mat) {
               mat.needsUpdate = true
               if (mat instanceof THREE.MeshStandardMaterial) {
+                // Улучшаем материалы для лучшей видимости
                 mat.metalness = mat.metalness || 0
-                mat.roughness = mat.roughness !== undefined ? mat.roughness : 0.5
+                mat.roughness = mat.roughness !== undefined ? mat.roughness : 0.4
+                // Увеличиваем emissive для подсветки темных областей
+                if (!mat.emissive) {
+                  mat.emissive = new THREE.Color(0x000000)
+                }
+                mat.emissiveIntensity = 0.1
               }
             }
           })
@@ -90,35 +96,67 @@ export default function ModelViewer({ modelPath }: { modelPath: string }) {
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
       >
-        {/* Оптимизированное освещение: уменьшено количество источников */}
-        <ambientLight intensity={0.6} />
+        {/* Улучшенное освещение для лучшей видимости модели */}
+        {/* Базовое освещение - увеличено для устранения затемнения */}
+        <ambientLight intensity={1.2} />
         <hemisphereLight 
-          intensity={0.4}
+          intensity={0.8}
           color="#ffffff"
-          groundColor="#b9b9b9"
+          groundColor="#e0e0e0"
         />
         
+        {/* Основные источники света с разных сторон для равномерного освещения */}
         <directionalLight 
-          position={[5, 5, 5]} 
-          intensity={1.0}
+          position={[5, 8, 5]} 
+          intensity={1.5}
+          color="#ffffff"
           castShadow={false}
         />
         <directionalLight 
-          position={[-5, -5, -5]} 
-          intensity={0.6}
+          position={[-5, 8, -5]} 
+          intensity={1.2}
           color="#ffffff"
+          castShadow={false}
         />
         <directionalLight 
           position={[0, 10, 0]} 
-          intensity={0.5}
+          intensity={1.0}
           color="#ffffff"
+          castShadow={false}
         />
         
-        {/* Оптимизация: объединены point lights в один с большей интенсивностью */}
-        <pointLight 
-          position={[0, 0, 0]} 
+        {/* Дополнительные источники для подсветки боковых сторон */}
+        <directionalLight 
+          position={[8, 2, 0]} 
           intensity={0.8}
-          distance={30}
+          color="#ffffff"
+          castShadow={false}
+        />
+        <directionalLight 
+          position={[-8, 2, 0]} 
+          intensity={0.8}
+          color="#ffffff"
+          castShadow={false}
+        />
+        
+        {/* Point lights для подсветки темных областей */}
+        <pointLight 
+          position={[5, 3, 5]} 
+          intensity={1.0}
+          distance={25}
+          color="#ffffff"
+        />
+        <pointLight 
+          position={[-5, 3, -5]} 
+          intensity={1.0}
+          distance={25}
+          color="#ffffff"
+        />
+        <pointLight 
+          position={[0, -2, 0]} 
+          intensity={0.6}
+          distance={20}
+          color="#ffffff"
         />
         
         <Suspense fallback={<ModelLoader />}>
@@ -134,6 +172,8 @@ export default function ModelViewer({ modelPath }: { modelPath: string }) {
           minDistance={5}
           maxDistance={15}
           dampingFactor={0.05}
+          minPolarAngle={Math.PI / 2}
+          maxPolarAngle={Math.PI / 2}
         />
       </Canvas>
     </div>
