@@ -3,19 +3,36 @@ import { useGLTF } from '@react-three/drei';
 import ModelViewer from '../components/Model';
 
 const MainPage: React.FC = () => {
-  // Предзагрузка модели сразу при загрузке страницы
   useEffect(() => {
     useGLTF.preload('/logo.glb');
   }, []);
 
   return (
-    <div className="relative w-full h-screen flex justify-center items-center overflow-hidden text-center">
-      <h1 className="text-[clamp(20px,4vw,60px)] font-black m-0 px-5 uppercase font-sans text-black z-[1] text-center">
-        Web Designer & Frontend Developer
-      </h1>
-      
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%] w-full h-full z-[2]">
+    <div className="relative w-full h-screen flex overflow-hidden text-center bg-black">
+      <div className="m-0 px-10 pt-[80px] w-full z-[2] flex ">
+        <img 
+          src="/AWWWDDE.svg" 
+          alt="AWWWDDE" 
+          className="w-full h-auto max-h-[250px] object-contain"
+        />
+      </div>
+      <div className="absolute bottom-[50px] left-10 z-[1] flex max-w-[800px] flex-col gap-2 text-left">
+          <div className="text-[20px] font-regular text-[#F4F4F6] leading-tight font-feature-mono">
+            WEB DESIGNER & FRONTEND DEVELOPER 
+          </div>
+          <div className="text-[36px] font-medium text-[#F4F4F6] leading-tight font-neue-haas">
+            I create websites — not as digital constructions, but as spaces where human thoughts, emotions, and technologies meet.
+          </div>
+      </div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[35%] w-full h-full z-[3]">
         <ModelViewer modelPath="/logo.glb" />
+      </div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1] max-w-[600px] w-full px-4 ">
+        <img 
+          src="/me.jpg" 
+          alt="Me" 
+          className="w-full h-auto object-contain"
+        />
       </div>
     </div>
   );
