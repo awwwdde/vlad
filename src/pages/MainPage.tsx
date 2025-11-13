@@ -3,6 +3,10 @@ import { useGLTF } from '@react-three/drei';
 import ModelViewer from '../components/Model';
 import Marquee from '../components/Marquee';
 import { motion } from 'framer-motion';
+import Music from '../components/Music';
+import type { MusicTrack } from '../components/Music';
+// Music import
+import jojiTrack from '../music/joji.mp3';
 
 
 const LEFT_MARQUEE_ITEMS = [
@@ -21,6 +25,14 @@ const RIGHT_MARQUEE_ITEMS = [
   'Creative Coding',
   'Responsive Design',
   'Performance Optimization',
+];
+
+const MUSIC_TRACKS: MusicTrack[] = [
+  {
+    id: 'pixelated-kisses',
+    title: 'Pixelated Kisses',
+    audioSrc: jojiTrack
+  }
 ];
 
 const MainPage: React.FC = () => {
@@ -65,6 +77,9 @@ const MainPage: React.FC = () => {
             alt="Clouds" 
             className="w-full h-auto object-contain"
           />
+        </div>
+        <div className="fixed bottom-20 right-20 z-[4]">
+          <Music tracks={MUSIC_TRACKS} />
         </div>
       </div>
       <div className="relative w-full z-[3] bg-black">
