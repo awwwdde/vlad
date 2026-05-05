@@ -1,0 +1,157 @@
+{
+  "nav": {
+    "work": "Work",
+    "about": "About",
+    "contact": "Contact"
+  },
+  "s0": {
+    "line1": "Think of a Color",
+    "pre": "It's",
+    "clip": "Lavender",
+    "clipEaster": "Blue",
+    "post": "isn't it?"
+  },
+  "s1": {
+    "l1": "Next time you look",
+    "l2": "for something real,",
+    "l3": "you'll know",
+    "clip": "where to go."
+  },
+  "s2": {
+    "l1": "I'm a Creative Developer",
+    "l2": "with a",
+    "rotating": ["thoughtful", "precise", "minimal", "honest"],
+    "l3": "approach."
+  },
+  "s3": {
+    "title1": "Simple process.",
+    "title2": "Real results.",
+    "step1_title": "Understand",
+    "step1_desc": "I dig into the brief. Ask the right questions. Find what really matters.",
+    "step2_title": "Build",
+    "step2_desc": "Design and code in parallel. Fast iterations. Tight feedback loops.",
+    "step3_title": "Ship",
+    "step3_desc": "On time. Pixel-perfect. Ready to scale."
+  },
+  "s4": {
+    "title1": "Ideas come in",
+    "title2": "many shapes.",
+    "cards": [
+      { "title": "Frontend",  "body": "React. TypeScript.\nTailwind. Vite.\nPixel-perfect." },
+      { "title": "Motion",    "body": "GSAP. Framer Motion.\nLenis. Scroll magic.\nUI choreography." },
+      { "title": "Design",    "body": "Figma. UI Systems.\nInteraction design.\nClean visual thinking." },
+      { "title": "Strategy",  "body": "Digital positioning.\nContent structure.\nHonest communication." }
+    ]
+  },
+  "s5": {
+    "title1": "I let the work",
+    "title2": "do the talking.",
+    "cta": "See all work →"
+  },
+  "s6": {
+    "title1": "Got a project?",
+    "title2": "Let's talk.",
+    "name": "Your name",
+    "email": "Your email",
+    "budget": "Your budget",
+    "submit": "Send it →",
+    "success": "Got it. I'll be in touch soon.",
+    "or": "or email directly"
+  },
+  "footer": { "made": "Designed & built by awwwdde", "year": "2026" },
+  
+  "about_sections": {
+    "a0": {
+      "badge": "awwwdde - Creative Developer & Designer",
+      "line1": "Based in Russia,",
+      "line2": "building things",
+      "clip": "that move.",
+      "line3": "since 2021.",
+      "paragraph": "I come from different backgrounds - design, code, and a lot of late nights.\nThat mix is what makes my work feel alive.\nI build interfaces that move, breathe, and get out of the way when they should.",
+      "facts": [
+        { "num": "4+", "label": "Years of\nbuilding interfaces" },
+        { "num": "12+", "label": "Projects\nshipped" },
+        { "num": "100%", "label": "Remote-ready,\nAlways honest" }
+      ]
+    },
+    "a1": {
+      "title": "What I bring\nto the table.",
+      "nodes": {
+        "frontend": {
+          "label": "Frontend",
+          "title": "Frontend",
+          "lines": ["React. TypeScript.", "Tailwind. Vite.", "Pixel-perfect."]
+        },
+        "motion": {
+          "label": "Motion",
+          "title": "Motion",
+          "lines": ["GSAP. Framer Motion.", "Lenis. Scroll magic.", "UI choreography."]
+        },
+        "design": {
+          "label": "Design",
+          "title": "Design",
+          "lines": ["Figma. UI Systems.", "Interaction design.", "Visual thinking."]
+        }
+      }
+    },
+    "a2": {
+      "title1": "Got a project?",
+      "title2": "Let's talk.",
+      "name": "Name",
+      "message": "Message",
+      "submit": "Send it ->",
+      "or": "or email directly"
+    }
+  },
+  "work_page": {
+    "label": "Selected Work",
+    "line1": "Things",
+    "line2": "I built.",
+    "line3": "& shipped."
+  },
+  "project_detail": {
+    "not_found": "Project not found.",
+    "back": "Back to work",
+    "all_work": "All work",
+    "delivered": "Delivered",
+    "live": "Live",
+    "visit": "Visit site →",
+    "next": "Next project",
+    "preview": "Preview"
+  },
+  "projects": {
+    "pickupservice": {
+      "title": "Pickup Service",
+      "tagline": "Where serious off-road begins.",
+      "desc": "Business card site for a Moscow SUV tuning garage. Dark, bold, mechanical — designed to match the machines they build.",
+      "tags": ["UI Design", "Development", "Branding"],
+      "link": "https://pickupservice.moscow/"
+    },
+    "kitluna": {
+      "title": "KitLuna",
+      "tagline": "A studio that builds studios.",
+      "desc": "Website for a web and software development agency. Clean system, clear hierarchy — built to convert.",
+      "tags": ["UI Design", "React", "Motion"]
+    },
+    "linkavto": {
+      "title": "LinkAvto",
+      "tagline": "Every part. Every car.",
+      "desc": "Marketplace for auto parts. Complex catalog, fast search, smooth UX across 50k+ SKUs.",
+      "tags": ["React", "TypeScript", "UX Design"],
+      "link": "https://linkavto.ru/"
+    },
+    "awwwdde": {
+      "title": "This site",
+      "tagline": "The cobbler's children have shoes.",
+      "desc": "My own portfolio — built with the same care I give every client project. Motion-heavy, minimal, honest.",
+      "tags": ["GSAP", "Framer Motion", "Lenis"]
+    },
+    "abrikosova": {
+      "title": "Elena Abrikosova",
+      "tagline": "Sweet things deserve beautiful pages.",
+      "desc": "Website for a pastry chef. Warm, soft, delicious — every scroll feels like unwrapping something special.",
+      "tags": ["UI Design", "Development"],
+      "link": "https://www.abrikosova-elena.ru/"
+    }
+  }
+}

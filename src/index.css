@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html { 
+    scroll-behavior: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-family: 'Onest', sans-serif;
+    background: #FFFFFF;
+    color: #0D0D0D;
+    cursor: none;
+  }
+
+  body.home-page {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    height: 100dvh;
+  }
+
+  ::selection {
+    background: #C4B5FD;
+    color: #0D0D0D;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0;
+  }
+}
+
+.split-line {
+  overflow: hidden !important;
+  display: block !important;
+  /* Reserve extra glyph space so bold ascenders/descenders are not clipped */
+  padding-top: 0.12em;
+  padding-bottom: 0.12em;
+  margin-top: -0.12em;
+  margin-bottom: -0.12em;
+}
+
+.word-init {
+  display: inline-block;
+  transform: translateY(115%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.easter-blue-glitch {
+  background:
+    linear-gradient(0deg, rgba(85, 204, 255, 0.82), rgba(85, 204, 255, 0.82)),
+    linear-gradient(
+      90deg,
+      transparent 0 50px,
+      rgba(0, 140, 255, 0.45) 50px 100px,
+      transparent 100px 150px,
+      rgba(0, 180, 255, 0.5) 150px 200px
+    ),
+    linear-gradient(
+      0deg,
+      transparent 0 50px,
+      rgba(0, 120, 255, 0.35) 50px 100px,
+      transparent 100px 150px,
+      rgba(0, 200, 255, 0.4) 150px 200px
+    );
+  background-size: 100% 100%, 200px 100%, 100% 200px;
+  background-position: 0 0, 0 0, 0 0;
+  mix-blend-mode: normal;
+  animation: easterPixelBlocks 0.28s steps(2, end) infinite;
+}
+
+@keyframes easterPixelBlocks {
+  0% {
+    opacity: 0.82;
+    background-position: 0 0, 0 0, 0 0;
+    filter: saturate(1.1);
+  }
+  25% {
+    opacity: 0.94;
+    background-position: 0 0, 50px 0, 0 50px;
+    filter: saturate(1.3);
+  }
+  50% {
+    opacity: 0.88;
+    background-position: 0 0, 100px 0, 0 100px;
+    filter: saturate(1.15);
+  }
+  75% {
+    opacity: 0.96;
+    background-position: 0 0, 150px 0, 0 150px;
+    filter: saturate(1.35);
+  }
+  100% {
+    opacity: 0.84;
+    background-position: 0 0, 200px 0, 0 200px;
+    filter: saturate(1.1);
+  }
+}
