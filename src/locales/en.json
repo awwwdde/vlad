@@ -5,11 +5,13 @@
     "contact": "Contact"
   },
   "s0": {
-    "line1": "Think of a Color",
+    "label": "think of a color",
     "pre": "It's",
-    "clip": "Lavender",
-    "clipEaster": "Blue",
-    "post": "isn't it?"
+    "word": "Lavender",
+    "question": "isn't it?",
+    "labelAlt": "or is it...",
+    "wordAlt": "Mint?",
+    "questionAlt": "wait, what?"
   },
   "s1": {
     "l1": "Next time you look",
