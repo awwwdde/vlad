@@ -24,6 +24,22 @@
     cursor: none;
   }
 
+  /* В админке кастомный курсор не нужен — возвращаем нормальный для удобства. */
+  body.admin,
+  body.admin * {
+    cursor: auto;
+  }
+  body.admin a,
+  body.admin button,
+  body.admin [role="button"],
+  body.admin label {
+    cursor: pointer;
+  }
+  body.admin input,
+  body.admin textarea {
+    cursor: text;
+  }
+
   body.home-page {
     overflow: hidden;
     overscroll-behavior: none;

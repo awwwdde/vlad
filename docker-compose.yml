@@ -1,0 +1,107 @@
+# =============================================================================
+# awwwdde — хост-стек платформы (один VPS).
+#
+#   caddy     — единая фронт-прокся: wildcard-HTTPS для *.awwwdde.art,
+#               Admin API на :2019 (панель прописывает в него роуты гостей).
+#   panel     — наша FastAPI-панель (back/). Управляет Docker хоста через
+#               смонтированный /var/run/docker.sock и Caddy через Admin API.
+#   panel_db  — Postgres для самой панели (отдельно от гостевых БД).
+#
+# Гостевые контейнеры (<slug>_app / <slug>_db) панель создаёт сама и цепляет
+# в сеть awwwdde_net — ту же, где живёт caddy, чтобы reverse_proxy их видел.
+# =============================================================================
+
+services:
+
+  caddy:
+    # Образ с DNS-плагином для wildcard-сертификата (DNS-01 challenge).
+    # Если используете другого DNS-провайдера — пересоберите с нужным плагином
+    # (см. Caddyfile и README).
+    build:
+      context: ./deploy
+      dockerfile: Caddy.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${BASE_DOMAIN:-awwwdde.art}
+      ACME_EMAIL: ${ACME_EMAIL}
+      # Токен DNS-провайдера для wildcard-сертификата (пример — Cloudflare).
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      # Статика главного сайта (наполняет сервис `front`).
+      - front_dist:/srv/front:ro
+    networks:
+      - awwwdde_net
+
+  panel:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN:-awwwdde.art}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://awwwdde:${PANEL_DB_PASSWORD}@panel_db:5432/awwwdde}
+      CADDY_ADMIN_URL: http://caddy:2019
+      CADDY_SERVER: srv0
+      DOCKER_NETWORK: awwwdde_net
+      GUEST_APP_PORT: "8080"
+      WORKSPACES_DIR: /workspaces
+      API_TOKEN: ${API_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      # Управление контейнерами хоста.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Исходники гостей переживают пересборку панели.
+      - panel_workspaces:/workspaces
+    depends_on:
+      panel_db:
+        condition: service_healthy
+    networks:
+      - awwwdde_net
+
+  front:
+    # Sidecar: собирает React-портфолио и кладёт dist/ в общий volume,
+    # из которого Caddy раздаёт статику apex-домена.
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - front_dist:/shared
+    networks:
+      - awwwdde_net
+
+  panel_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: awwwdde
+      POSTGRES_PASSWORD: ${PANEL_DB_PASSWORD}
+      POSTGRES_DB: awwwdde
+    volumes:
+      - panel_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awwwdde -d awwwdde"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - awwwdde_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+  panel_db_data:
+  panel_workspaces:
+  front_dist:
+
+networks:
+  awwwdde_net:
+    # Фиксируем имя — то же, что прописано в панели (DOCKER_NETWORK).
+    name: awwwdde_net

@@ -4,19 +4,12 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { TextReveal } from '@/components/ui/TextReveal'
 import { useCursor } from '@/context/CursorContext'
-
-const SLUGS = ['pickupservice', 'kitluna', 'linkavto', 'awwwdde', 'abrikosova']
-
-const PROJECT_ACCENTS: Record<string, string> = {
-  pickupservice: '#1a1a1a',
-  kitluna: '#C4B5FD',
-  linkavto: '#2563EB',
-  awwwdde: '#C4B5FD',
-  abrikosova: '#FCA5A5',
-}
+import { usePortfolio, useBundle } from '@/hooks/usePortfolio'
+import type { PortfolioItem } from '@/admin/types'
 
 export default function Work() {
   const { t } = useTranslation()
+  const items = usePortfolio()
 
   return (
     <div className="bg-white text-ink min-h-screen">
@@ -64,13 +57,8 @@ export default function Work() {
 
       <section className="px-10 md:px-16 pb-32">
         <div className="divide-y divide-ink/8">
-          {SLUGS.map((slug, i) => (
-            <ProjectRow
-              key={slug}
-              slug={slug}
-              index={i}
-              accent={PROJECT_ACCENTS[slug]}
-            />
+          {items.map((item, i) => (
+            <ProjectRow key={item.slug} item={item} index={i} />
           ))}
         </div>
       </section>
@@ -78,21 +66,9 @@ export default function Work() {
   )
 }
 
-function ProjectRow({
-  slug,
-  index,
-  accent,
-}: {
-  slug: string
-  index: number
-  accent: string
-}) {
-  const { t } = useTranslation()
+function ProjectRow({ item, index }: { item: PortfolioItem; index: number }) {
   const { set } = useCursor()
-
-  const title = t(`projects.${slug}.title`)
-  const tagline = t(`projects.${slug}.tagline`)
-  const tags = t(`projects.${slug}.tags`, { returnObjects: true }) as string[]
+  const b = useBundle(item)!
 
   return (
     <motion.div
@@ -102,14 +78,14 @@ function ProjectRow({
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: index * 0.05 }}
     >
       <Link
-        to={`/work/${slug}`}
+        to={`/work/${item.slug}`}
         className="group flex items-center justify-between py-8 md:py-10 gap-6 relative overflow-hidden"
         onMouseEnter={() => set('view')}
         onMouseLeave={() => set('default')}
       >
         <motion.div
           className="absolute inset-0 -z-10"
-          style={{ backgroundColor: accent, originX: 0 }}
+          style={{ backgroundColor: item.accent ?? '#C4B5FD', originX: 0 }}
           initial={{ scaleX: 0 }}
           whileHover={{ scaleX: 1 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -126,15 +102,15 @@ function ProjectRow({
             whileHover={{ x: 8 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
-            {title}
+            {b.title}
           </motion.h2>
           <p className="font-mono text-[11px] text-muted uppercase tracking-widest mt-1 group-hover:text-white/60 transition-colors">
-            {tagline}
+            {b.tagline}
           </p>
         </div>
 
         <div className="hidden md:flex gap-2 flex-wrap justify-end max-w-[280px] flex-shrink-0">
-          {tags.map(tag => (
+          {b.tags.map(tag => (
             <span
               key={tag}
               className="font-mono text-[10px] text-muted border border-ink/10 px-3 py-1 rounded-full group-hover:border-white/20 group-hover:text-white/60 transition-colors"

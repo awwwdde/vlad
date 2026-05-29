@@ -1,0 +1,18 @@
+# Хост-сервис awwwdde — панель управления тестовыми деплоями.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+SQLAlchemy==2.0.36
+# Postgres-драйвер панели (psycopg3); для dev по умолчанию SQLite без него.
+psycopg[binary]==3.2.3
+# Оркестрация контейнеров гостевых проектов.
+docker==7.1.0
+# HTTP-клиент к Caddy Admin API.
+httpx==0.28.1
+# CLI-клиент.
+typer==0.15.1
+rich==13.9.4
+# Auth: bcrypt-хэши паролей + JWT для веб-админки.
+bcrypt==5.0.0
+PyJWT==2.10.1

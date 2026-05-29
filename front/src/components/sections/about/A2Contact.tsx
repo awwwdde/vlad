@@ -7,12 +7,16 @@ import { useSplitReveal, SPRING } from '@/hooks/useSplitReveal'
 import { sectionVariants } from '@/components/sections/sectionVariants'
 import { useCursor } from '@/context/CursorContext'
 import gsap from 'gsap'
+import { submitContact } from '@/utils/contactApi'
 
 export function A2Contact() {
   const { t } = useTranslation()
   const { dir } = useSectionCtx()
   const { set } = useCursor()
   const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState({ name: '', email: '', message: '' })
   const formRef = useRef<HTMLFormElement>(null)
 
   const r1 = useSplitReveal({ trigger: true, delay: 0.05, stagger: 0.25 })
@@ -39,17 +43,34 @@ export function A2Contact() {
     )
   }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formRef.current) return
-
-    gsap.to(formRef.current, {
-      scaleX: 0,
-      transformOrigin: 'right center',
-      duration: 0.5,
-      ease: 'power2.in',
-      onComplete: () => setSent(true),
-    })
+    setBusy(true)
+    setError(null)
+    try {
+      await submitContact({
+        name: form.name,
+        email: form.email,
+        message: form.message,
+        source: 'about',
+      })
+      // Анимация только после успешного ответа сервера.
+      if (formRef.current) {
+        gsap.to(formRef.current, {
+          scaleX: 0,
+          transformOrigin: 'right center',
+          duration: 0.5,
+          ease: 'power2.in',
+          onComplete: () => setSent(true),
+        })
+      } else {
+        setSent(true)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось отправить')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const inputClass = `
@@ -106,6 +127,8 @@ export function A2Contact() {
                   type="text"
                   placeholder={t('about_sections.a2.name')}
                   required
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   onMouseEnter={() => set('text')}
                   onMouseLeave={() => set('default')}
                 />
@@ -115,6 +138,8 @@ export function A2Contact() {
                   type="email"
                   placeholder={t('s6.email')}
                   required
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   onMouseEnter={() => set('text')}
                   onMouseLeave={() => set('default')}
                 />
@@ -124,22 +149,30 @@ export function A2Contact() {
                   type="text"
                   placeholder={t('about_sections.a2.message')}
                   required
+                  value={form.message}
+                  onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
                   onMouseEnter={() => set('text')}
                   onMouseLeave={() => set('default')}
                 />
               </div>
 
+              {error && (
+                <p className="font-mono text-[11px] text-red-500 uppercase tracking-widest mb-2">
+                  {error}
+                </p>
+              )}
               <div className="flex items-center justify-between mt-2">
                 <button
                   type="submit"
-                  className="bg-lav text-ink font-sans font-bold px-8 py-3 rounded-full hover:bg-lav-dark transition-colors"
+                  disabled={busy}
+                  className="bg-lav text-ink font-sans font-bold px-8 py-3 rounded-full hover:bg-lav-dark transition-colors disabled:opacity-50"
                   onMouseEnter={() => set('pointer')}
                   onMouseLeave={() => set('default')}
                   style={{
                     clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)',
                   }}
                 >
-                  {t('about_sections.a2.submit')}
+                  {busy ? '…' : t('about_sections.a2.submit')}
                 </button>
 
                 <div className="text-right">

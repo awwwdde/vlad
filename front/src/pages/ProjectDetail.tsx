@@ -5,45 +5,31 @@ import { motion } from 'framer-motion'
 import { TextReveal } from '@/components/ui/TextReveal'
 import { MagneticButton } from '@/components/ui/MagneticButton'
 import { useCursor } from '@/context/CursorContext'
-
-const SLUGS = ['pickupservice', 'kitluna', 'linkavto', 'awwwdde', 'abrikosova']
-
-const PROJECT_LINKS: Record<string, string> = {
-  pickupservice: 'https://pickupservice.moscow/',
-  linkavto: 'https://linkavto.ru/',
-  abrikosova: 'https://www.abrikosova-elena.ru/',
-}
-
-const PROJECT_IMAGES: Record<string, string> = {
-  pickupservice: '/images/pickupservice.jpg',
-  kitluna: '/images/kitluna.jpg',
-  linkavto: '/images/linkavto.jpg',
-  awwwdde: '/images/awwwdde.jpg',
-  abrikosova: '/images/abrikosova.jpg',
-}
+import { usePortfolio, usePortfolioItem, useBundle } from '@/hooks/usePortfolio'
 
 export default function ProjectDetail() {
   const { slug } = useParams<{ slug: string }>()
   const { t } = useTranslation()
   const { set } = useCursor()
 
-  if (!slug || !SLUGS.includes(slug)) {
+  const items = usePortfolio()
+  const item = usePortfolioItem(slug)
+  // Все хуки вызываем до любых ранних return-ов (Rules of Hooks).
+  const currentIdx = item ? items.findIndex(i => i.slug === item.slug) : -1
+  const next = items.length ? items[(currentIdx + 1) % items.length] : null
+  const b = useBundle(item)
+  const nextBundle = useBundle(next)
+
+  if (!item || !b || !next || !nextBundle) {
     return (
       <div className="pt-40 px-10 text-center">
         <p className="font-mono text-muted">{t('project_detail.not_found')}</p>
-        <Link to="/work" className="text-ink underline mt-4 block">← {t('project_detail.back')}</Link>
+        <Link to="/work" className="text-ink underline mt-4 block">
+          ← {t('project_detail.back')}
+        </Link>
       </div>
     )
   }
-
-  const title = t(`projects.${slug}.title`)
-  const tagline = t(`projects.${slug}.tagline`)
-  const desc = t(`projects.${slug}.desc`)
-  const tags = t(`projects.${slug}.tags`, { returnObjects: true }) as string[]
-  const link = PROJECT_LINKS[slug]
-  const imgSrc = PROJECT_IMAGES[slug]
-
-  const nextSlug = SLUGS[(SLUGS.indexOf(slug) + 1) % SLUGS.length]
 
   return (
     <div className="bg-white text-ink">
@@ -65,7 +51,7 @@ export default function ProjectDetail() {
           duration={1.0}
           delay={0.1}
         >
-          {title}
+          {b.title}
         </TextReveal>
 
         <TextReveal
@@ -75,7 +61,7 @@ export default function ProjectDetail() {
           stagger={0.25}
           delay={0.25}
         >
-          {tagline}
+          {b.tagline}
         </TextReveal>
       </section>
 
@@ -89,10 +75,9 @@ export default function ProjectDetail() {
         >
           <div className="aspect-video w-full flex items-center justify-center bg-surface">
             <span className="font-mono text-[11px] text-muted uppercase tracking-widest">
-              {title} - {t('project_detail.preview')}
+              {b.title} - {t('project_detail.preview')}
             </span>
-            <img src={imgSrc} alt={title} className="hidden" />
-            {/* <img src={imgSrc} alt={title} className="w-full h-full object-cover" /> */}
+            {item.image_url && <img src={item.image_url} alt={b.title} className="hidden" />}
           </div>
         </motion.div>
       </section>
@@ -106,7 +91,7 @@ export default function ProjectDetail() {
               style={{ fontSize: 'clamp(16px, 1.4vw, 22px)' } as any}
               stagger={0.3}
             >
-              {desc}
+              {b.desc}
             </TextReveal>
           </div>
 
@@ -116,7 +101,7 @@ export default function ProjectDetail() {
                 {t('project_detail.delivered')}
               </span>
               <div className="flex flex-col gap-2">
-                {tags.map(tag => (
+                {b.tags.map(tag => (
                   <span key={tag} className="font-sans text-[clamp(14px,1vw,18px)] text-ink">
                     {tag}
                   </span>
@@ -124,15 +109,12 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            {link && (
+            {item.link && (
               <div>
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted block mb-4">
                   {t('project_detail.live')}
                 </span>
-                <MagneticButton
-                  href={link}
-                  variant="outline"
-                >
+                <MagneticButton href={item.link} variant="outline">
                   {t('project_detail.visit')}
                 </MagneticButton>
               </div>
@@ -147,7 +129,7 @@ export default function ProjectDetail() {
         </span>
 
         <Link
-          to={`/work/${nextSlug}`}
+          to={`/work/${next.slug}`}
           className="group flex items-center justify-between"
           onMouseEnter={() => set('view')}
           onMouseLeave={() => set('default')}
@@ -158,7 +140,7 @@ export default function ProjectDetail() {
             whileHover={{ x: 12 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
-            {t(`projects.${nextSlug}.title`)}
+            {nextBundle.title}
           </motion.h2>
           <motion.span
             className="font-mono text-[clamp(24px,4vw,64px)] text-ink/20 group-hover:text-lav-dark transition-colors"
