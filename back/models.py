@@ -47,6 +47,12 @@ class Project(Base):
     # Сгенерированный пароль БД гостя (нужен для DATABASE_URL и pg_dump).
     db_password: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # Базовые секреты гостя — генерируются при первом деплое и переживают
+    # пересоздание контейнера, чтобы JWT/session-токены не инвалидировались.
+    # Прокидываются как SECRET_KEY / JWT_SECRET в environment app-контейнера.
+    secret_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    jwt_secret: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

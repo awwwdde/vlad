@@ -180,7 +180,14 @@ def _wait_db_ready(db_container: str, slug: str, timeout: int = 60) -> None:
 
 # ── App гостя ────────────────────────────────────────────────────────────────
 
-def run_app(slug: str, image_tag: str, database_url: str) -> str:
+def run_app(
+    slug: str,
+    image_tag: str,
+    database_url: str,
+    *,
+    secret_key: str,
+    jwt_secret: str,
+) -> str:
     app_container, _, _, _ = _names(slug)
     _remove_container(app_container)  # пересоздаём начисто на каждый деплой
     client().containers.run(
@@ -191,8 +198,12 @@ def run_app(slug: str, image_tag: str, database_url: str) -> str:
         network=settings.docker_network,
         environment={
             "DATABASE_URL": database_url,
-            # Минимальный набор; остальное гость берёт из своих дефолтов.
             "PUBLIC_SITE_URL": f"https://{slug}.{settings.base_domain}",
+            # Базовые секреты, которых гость почти всегда хочет (pydantic-settings
+            # типично требует их обязательными). Стабильны между деплоями —
+            # хранятся в Project и переживают пересоздание контейнера.
+            "SECRET_KEY": secret_key,
+            "JWT_SECRET": jwt_secret,
         },
     )
     return app_container
@@ -226,6 +237,11 @@ def wait_healthy(slug: str, timeout: int = 120) -> None:
 
 def gen_db_password() -> str:
     return secrets.token_urlsafe(24)
+
+
+def gen_secret() -> str:
+    """Сильный случайный секрет для SECRET_KEY / JWT_SECRET гостя."""
+    return secrets.token_urlsafe(48)
 
 
 def stop_project(slug: str) -> None:

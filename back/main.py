@@ -199,6 +199,10 @@ def deploy_project(
     app_container, db_container, image_tag, _ = engine._names(slug)
     if not proj.db_password:
         proj.db_password = engine.gen_db_password()
+    if not proj.secret_key:
+        proj.secret_key = engine.gen_secret()
+    if not proj.jwt_secret:
+        proj.jwt_secret = engine.gen_secret()
     proj.app_container = app_container
     proj.db_container = db_container
     proj.image_tag = image_tag
@@ -216,7 +220,13 @@ def deploy_project(
         db.commit()
 
         engine.ensure_db(slug, proj.db_password)
-        engine.run_app(slug, image_tag, proj.database_url)
+        engine.run_app(
+            slug,
+            image_tag,
+            proj.database_url,
+            secret_key=proj.secret_key,
+            jwt_secret=proj.jwt_secret,
+        )
         engine.wait_healthy(slug)
 
         caddy.upsert_route(slug)

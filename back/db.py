@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import settings
@@ -42,7 +42,22 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Создать таблицы панели (MVP — без alembic)."""
+    """Создать таблицы панели и накатить лёгкие in-place миграции (без alembic).
+
+    `create_all` создаёт только отсутствующие таблицы — новые колонки на уже
+    существующих он не добавит. Поэтому ниже идёт идемпотентный набор
+    ADD COLUMN IF NOT EXISTS для тех полей, которые появились после первого
+    деплоя БД панели. Постгресовый синтаксис — это OK, мы фиксируем Postgres
+    как единственный поддерживаемый драйвер.
+    """
     import models  # noqa: F401  — регистрация моделей
 
     Base.metadata.create_all(bind=engine)
+
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS secret_key VARCHAR(120)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS jwt_secret VARCHAR(120)"
+        ))
