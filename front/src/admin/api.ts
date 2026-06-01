@@ -15,8 +15,13 @@ export const tokenStore = {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  // Поле объявлено явно вместо `constructor(public status: …)` —
+  // erasableSyntaxOnly в tsconfig запрещает parameter properties
+  // (они создают runtime-побочный эффект, который нельзя «стереть»).
+  status: number
+  constructor(status: number, message: string) {
     super(message)
+    this.status = status
   }
 }
 
