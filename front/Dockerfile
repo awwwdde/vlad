@@ -7,8 +7,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # package.json первым — кеш слоёв сохраняется при изменении исходников.
+# Используем npm install (а не npm ci), потому что package-lock.json может
+# содержать только Windows/macOS-варианты optional-пакетов (rollup/lightningcss
+# и пр. имеют per-platform нативные бинарники). npm ci падает с EUSAGE,
+# install — спокойно дозаписывает Linux-варианты в lock внутри образа.
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install --omit=dev=false --no-audit --no-fund
 
 COPY . .
 RUN npm run build
