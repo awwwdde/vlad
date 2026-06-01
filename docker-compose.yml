@@ -57,6 +57,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Исходники гостей переживают пересборку панели.
       - panel_workspaces:/workspaces
+      # Бандлы локалей фронта — нужны для первичного сидинга переводов
+      # (см. back/seed_translations.py → _CANDIDATES). Read-only.
+      - ./front/src/locales:/app/locales:ro
     depends_on:
       panel_db:
         condition: service_healthy

@@ -33,18 +33,29 @@ def _find_locales_dir() -> Path | None:
 
 
 def seed_if_empty() -> None:
+    """Залить бандлы локалей если их в БД нет ИЛИ они пустые.
+
+    Проверяем per-lang: если для языка нет строки или её data={} (так бывает,
+    когда фронт случайно GET-нул /translations/{lang} раньше сидинга и
+    создал пустую запись-болванку), то перезаливаем из файла.
+    """
+    src = _find_locales_dir()
+    if not src:
+        print(
+            "[translations] локали не найдены — таблица оставлена как есть. "
+            "Смонтируйте front/src/locales или залейте через PUT API."
+        )
+        return
+
     with SessionLocal() as db:
-        if db.scalar(select(Translation).limit(1)):
-            return
-        src = _find_locales_dir()
-        if not src:
-            print(
-                "[translations] локали не найдены — таблица оставлена пустой. "
-                "Залейте через PUT /api/content/translations/{lang}."
-            )
-            return
         for lang in ("ru", "en"):
+            existing = db.get(Translation, lang)
+            if existing and existing.data:
+                continue  # уже заполнено — не трогаем
             data = json.loads((src / f"{lang}.json").read_text(encoding="utf-8"))
-            db.add(Translation(lang=lang, data=data))
+            if existing:
+                existing.data = data
+            else:
+                db.add(Translation(lang=lang, data=data))
+            print(f"[translations] засидил {lang} из {src}")
         db.commit()
-        print(f"[translations] засидил ru/en из {src}")
