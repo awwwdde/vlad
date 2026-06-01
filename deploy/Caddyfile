@@ -1,22 +1,17 @@
 # Базовая конфигурация Caddy для платформы awwwdde.
 #
-# Что здесь:
-#   • Admin API открыт на 0.0.0.0:2019 — панель из соседнего контейнера
-#     добавляет/убирает маршруты гостей через REST.
-#   • Wildcard-сертификат на *.awwwdde.art (DNS-01, плагин cloudflare).
+#   • Admin API открыт на 0.0.0.0:2019 — панель добавляет/убирает маршруты
+#     гостей через REST (см. back/caddy.py).
 #   • Apex {$DOMAIN}: отдаём SPA-портфолио + проксируем /api/* в панель.
-#   • *.{$DOMAIN}: маршруты гостей пишет панель (caddy.py → /config/.../routes).
-#
-# Caddyfile адаптируется в JSON; имя сервера по умолчанию — srv0
-# (совпадает с CADDY_SERVER в .env панели).
+#   • Под-сайты <slug>.{$DOMAIN}: маршруты пишет панель на лету, Caddy
+#     автоматически выпускает HTTP-01 сертификат при первом запросе.
+#     Чтобы это работало, *.awwwdde.art должен резолвиться на этот IP
+#     (wildcard A-запись в DNS-провайдере).
 
 {
 	email {$ACME_EMAIL}
 	# Admin API доступен другим контейнерам сети (не только localhost).
 	admin 0.0.0.0:2019
-
-	# Wildcard-сертификат через Cloudflare DNS.
-	acme_dns cloudflare {$CF_API_TOKEN}
 }
 
 # ── Основной сайт + admin (apex домен) ───────────────────────────────────────
@@ -38,29 +33,10 @@
 	# Статика SPA из общего volume (его наполняет сервис `front` в compose).
 	handle {
 		root * /srv/front
-		# History API fallback: любой неизвестный путь → index.html, React-роутер разберётся.
 		try_files {path} /index.html
 		file_server
 	}
 
-	log {
-		output stdout
-		format console
-	}
-}
-
-# ── Под-сайты (wildcard) ─────────────────────────────────────────────────────
-# Заглушка для свободных поддоменов; маршруты привязанных проектов добавляет
-# панель через Admin API (см. back/caddy.py).
-*.{$DOMAIN} {
-	encode zstd gzip
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options "nosniff"
-		Referrer-Policy "strict-origin-when-cross-origin"
-		-Server
-	}
-	respond "awwwdde: проект для этого поддомена ещё не развёрнут" 404
 	log {
 		output stdout
 		format console

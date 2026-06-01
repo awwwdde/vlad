@@ -28,8 +28,6 @@ services:
     environment:
       DOMAIN: ${BASE_DOMAIN:-awwwdde.art}
       ACME_EMAIL: ${ACME_EMAIL}
-      # Токен DNS-провайдера для wildcard-сертификата (пример — Cloudflare).
-      CF_API_TOKEN: ${CF_API_TOKEN:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
