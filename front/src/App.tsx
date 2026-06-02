@@ -7,17 +7,45 @@ import Home from '@/pages/Home'
 import Work from '@/pages/Work'
 import ProjectDetail from '@/pages/ProjectDetail'
 import About from '@/pages/About'
+import ComingSoon from '@/pages/ComingSoon'
 import './i18n'
 
-import { useEffect, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import Lenis from 'lenis'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useSiteSettings, flagBool } from '@/hooks/useSiteSettings'
 
 gsap.registerPlugin(ScrollTrigger)
 
 // Админка лениво — публичный сайт не тащит её код, пока никто не зайдёт на /admin.
 const AdminApp = lazy(() => import('@/admin/AdminApp'))
+
+// ── Coming Soon-гейт ────────────────────────────────────────────────────────
+// Управляется из админки (Site Settings → coming_soon=true|false), без пересборки фронта.
+// Bypass для тебя как админа:
+//   1. URL `?preview` — сохраняется в localStorage.
+//   2. Заход в /admin/login — авто-выставляет bypass при успехе.
+const BYPASS_KEY = 'awwwdde_preview_bypass'
+
+function usePreviewBypass(): boolean {
+  const [bypass] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('preview')) {
+        window.localStorage.setItem(BYPASS_KEY, '1')
+        const cleanUrl = window.location.pathname + window.location.hash
+        window.history.replaceState(null, '', cleanUrl)
+        return true
+      }
+      return window.localStorage.getItem(BYPASS_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  return bypass
+}
 
 function PublicShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
@@ -49,8 +77,38 @@ function PublicShell({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Роутер верхнего уровня: /admin/* выпадает в свой собственный layout без
-// курсора/хедера/футера/Lenis — у админки своя эстетика и свой UX.
+function PublicRoutes() {
+  const bypass = usePreviewBypass()
+  const settings = useSiteSettings()
+  const comingSoon = flagBool(settings, 'coming_soon', false)
+
+  // НЕ блокируем рендер на null — иначе при недоступном беке (локальный dev
+  // без uvicorn, network error) сайт зависает на белом экране. flagBool
+  // принимает null и отдаёт дефолт; если ComingSoon включён, пользователь
+  // увидит главную на ~200ms и потом переключение — это лучше, чем «всё
+  // умерло». Bypass-кука стабилизирует ситуацию для тебя сразу.
+
+  if (comingSoon && !bypass) {
+    return <ComingSoon />
+  }
+
+  return (
+    <CursorProvider>
+      <CustomCursor />
+      <PublicShell>
+        <Routes>
+          <Route path="/"            element={<Home />} />
+          <Route path="/work"        element={<Work />} />
+          <Route path="/work/:slug"  element={<ProjectDetail />} />
+          <Route path="/about"       element={<About />} />
+        </Routes>
+      </PublicShell>
+    </CursorProvider>
+  )
+}
+
+// Роутер верхнего уровня: /admin/* всегда доступен (минуя coming-soon),
+// /* проходит через гейт.
 function Router() {
   return (
     <Routes>
@@ -68,22 +126,7 @@ function Router() {
           </Suspense>
         }
       />
-      <Route
-        path="/*"
-        element={
-          <CursorProvider>
-            <CustomCursor />
-            <PublicShell>
-              <Routes>
-                <Route path="/"            element={<Home />} />
-                <Route path="/work"        element={<Work />} />
-                <Route path="/work/:slug"  element={<ProjectDetail />} />
-                <Route path="/about"       element={<About />} />
-              </Routes>
-            </PublicShell>
-          </CursorProvider>
-        }
-      />
+      <Route path="/*" element={<PublicRoutes />} />
     </Routes>
   )
 }

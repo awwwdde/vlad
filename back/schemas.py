@@ -244,3 +244,17 @@ class EnvVarsBulk(BaseModel):
     """Заменяет весь набор env-vars проекта на переданный."""
 
     items: list[EnvVarBulkItem]
+
+
+# ── Site settings (KV для публичных флагов) ─────────────────────────────────
+
+class SiteSettingIn(BaseModel):
+    value: str
+
+
+class SiteSettingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    value: str
+    updated_at: datetime

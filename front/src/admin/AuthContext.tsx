@@ -19,6 +19,10 @@ interface AuthState {
 
 const AuthCtx = createContext<AuthState | null>(null)
 
+// Ключ должен совпадать с App.tsx → BYPASS_KEY. Логин в админку
+// автоматически открывает доступ к публичному сайту в Coming Soon-режиме.
+const PREVIEW_BYPASS_KEY = 'awwwdde_preview_bypass'
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   // loading = true пока проверяем сохранённый токен; не редиректим раньше времени.
@@ -32,7 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api<User>('/api/auth/me')
       .then(u => {
-        if (!cancelled) setUser(u)
+        if (!cancelled) {
+          setUser(u)
+          // Подтверждённая сессия — bypass на coming-soon тоже валиден.
+          try { localStorage.setItem(PREVIEW_BYPASS_KEY, '1') } catch { /* ignore */ }
+        }
       })
       .catch(() => {
         if (!cancelled) tokenStore.clear()
@@ -52,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       anonymous: true,
     })
     tokenStore.set(res.access_token)
+    // Автоматический bypass coming-soon: ты как админ всегда видишь полный сайт.
+    try { localStorage.setItem(PREVIEW_BYPASS_KEY, '1') } catch { /* ignore */ }
     setUser(res.user)
   }, [])
 

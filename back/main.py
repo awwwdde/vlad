@@ -35,6 +35,7 @@ from models import (
     Project,
     ProjectEnvVar,
     ProjectStatus,
+    SiteSetting,
     Translation,
     User,
 )
@@ -55,6 +56,8 @@ from schemas import (
     ProjectCreate,
     ProjectOut,
     ReorderRequest,
+    SiteSettingIn,
+    SiteSettingOut,
     TranslationIn,
     TranslationOut,
     UserOut,
@@ -85,6 +88,26 @@ def _startup() -> None:
     init_db()
     seed_portfolio_if_empty()
     seed_translations_if_empty()
+    _seed_site_defaults()
+
+
+# ── Дефолты Site Settings ──────────────────────────────────────────────────
+
+_SITE_DEFAULTS = {
+    # "true" — публичный сайт показывает заглушку ComingSoon. "false" — открыт всем.
+    "coming_soon": "false",
+}
+
+
+def _seed_site_defaults() -> None:
+    """Прописать дефолтные ключи site_settings, если их нет."""
+    from db import SessionLocal
+
+    with SessionLocal() as db:
+        for key, default in _SITE_DEFAULTS.items():
+            if db.get(SiteSetting, key) is None:
+                db.add(SiteSetting(key=key, value=default))
+        db.commit()
 
 
 # ── Хелперы ──────────────────────────────────────────────────────────────────
@@ -494,6 +517,35 @@ def portfolio_reorder(
             )
         )
     )
+
+
+# ── Site settings (флаги публичной части) ──────────────────────────────────
+# GET — публичный (нужен фронту даже до логина).
+# PUT — только под auth.
+
+@app.get("/api/site/settings")
+def site_settings_list(db: Session = Depends(get_db)) -> dict[str, str]:
+    """Все настройки одним словарём (key → value)."""
+    rows = db.scalars(select(SiteSetting))
+    return {r.key: r.value for r in rows}
+
+
+@app.put("/api/site/settings/{key}", response_model=SiteSettingOut)
+def site_settings_put(
+    key: str,
+    payload: SiteSettingIn,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> SiteSetting:
+    setting = db.get(SiteSetting, key)
+    if setting is None:
+        setting = SiteSetting(key=key, value=payload.value)
+        db.add(setting)
+    else:
+        setting.value = payload.value
+    db.commit()
+    db.refresh(setting)
+    return setting
 
 
 # ── Контент: переводы (тексты секций главного сайта) ───────────────────────

@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '@/admin/api'
+import { motion } from 'framer-motion'
+import { api, ApiError } from '@/admin/api'
 import type { Project } from '@/admin/types'
 import { STATUS_META } from './projectStatus'
+
+// Тоже самое имя канала и того же ключа, что и в front public (useSiteSettings).
+// При тоггле — оповещаем все вкладки (включая публику) перечитать настройки.
+const SITE_CHANNEL =
+  typeof window !== 'undefined' && 'BroadcastChannel' in window
+    ? new BroadcastChannel('awwwdde.site')
+    : null
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[] | null>(null)
@@ -31,6 +39,8 @@ export default function Dashboard() {
           {error}
         </div>
       )}
+
+      <ComingSoonToggle />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {Object.entries(STATUS_META).map(([key, meta]) => (
@@ -75,5 +85,106 @@ export default function Dashboard() {
         </ul>
       </div>
     </div>
+  )
+}
+
+// ── Тоггл «Режим тестов» ───────────────────────────────────────────────────
+
+function ComingSoonToggle() {
+  // null = ещё не загрузили; true/false — текущее состояние
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const reload = useCallback(() => {
+    api<Record<string, string>>('/api/site/settings')
+      .then(s => setEnabled(s.coming_soon === 'true'))
+      .catch(e => setError(e instanceof ApiError ? e.message : String(e)))
+  }, [])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  async function toggle() {
+    if (enabled === null) return
+    const next = !enabled
+    setBusy(true)
+    setError(null)
+    // Оптимистично переключаем UI — отыграем назад если PUT упадёт.
+    setEnabled(next)
+    try {
+      await api(`/api/site/settings/coming_soon`, {
+        method: 'PUT',
+        body: { value: next ? 'true' : 'false' },
+      })
+      // Оповещаем все открытые вкладки публички — они мгновенно
+      // перерисуются в ComingSoon (или обратно).
+      SITE_CHANNEL?.postMessage({ type: 'invalidate' })
+    } catch (e) {
+      setEnabled(!next)
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isLoading = enabled === null
+
+  return (
+    <motion.div
+      layout
+      className={`rounded-xl border p-5 flex items-center gap-5 ${
+        enabled
+          ? 'border-amber-700/50 bg-amber-950/20'
+          : 'border-neutral-900 bg-neutral-950'
+      }`}
+    >
+      {/* Статус-индикатор */}
+      <div className="flex-shrink-0">
+        <motion.div
+          animate={enabled ? { scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] } : {}}
+          transition={enabled ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
+          className={`w-3 h-3 rounded-full ${
+            enabled ? 'bg-amber-400' : 'bg-emerald-500'
+          }`}
+        />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <h2 className="text-sm font-medium text-neutral-100">
+          {isLoading
+            ? 'Загрузка статуса…'
+            : enabled
+              ? 'Сайт скрыт: режим тестов'
+              : 'Сайт открыт для всех'}
+        </h2>
+        <p className="text-xs text-neutral-500 mt-1 max-w-xl">
+          {enabled
+            ? 'Обычные посетители видят заглушку ComingSoon. Ты, как админ, и любой по ссылке ?preview — видят полный сайт.'
+            : 'Главная и страницы Work/About доступны любому посетителю. Включи режим тестов, если хочешь полировать в тишине.'}
+        </p>
+      </div>
+
+      <button
+        onClick={toggle}
+        disabled={busy || isLoading}
+        className={`flex-shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
+          enabled
+            ? 'bg-emerald-100 text-emerald-950 hover:bg-emerald-50'
+            : 'bg-amber-100 text-amber-950 hover:bg-amber-50'
+        }`}
+      >
+        {busy
+          ? '…'
+          : enabled
+            ? 'Открыть для всех'
+            : 'Включить режим тестов'}
+      </button>
+
+      {error && (
+        <div className="absolute mt-16 text-xs text-red-400">{error}</div>
+      )}
+    </motion.div>
   )
 }

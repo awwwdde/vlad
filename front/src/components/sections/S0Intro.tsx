@@ -26,12 +26,16 @@ const GLITCH_B: GlitchPalette = { bg: PALETTE_B.bg, text: PALETTE_B.text, clipBg
 
 const HEADLINE_SIZE = 'clamp(28px, 5vw, 80px)'
 const HEADLINE_LINE_HEIGHT = 1.05
-/** Сдвиг стека из 3 строк (Mint) вниз — плашка ближе к месту Lavender */
-const MINT_STACK_NUDGE_Y = 'min(4.25vw, 40px)'
 
 /** Открытый clip-path в разметке — если GSAP не выполнится, слово не «исчезает» */
 const CLIP_OPEN = 'polygon(-30% 0, 130% 0, 130% 120%, -30% 120%)'
 const CLIP_CLOSED = 'polygon(-30% 0, 0% 0, 0% 120%, -30% 120%)'
+
+/** Зазор между плашкой и строками сверху/снизу.
+ *  Использует одни и те же значения для label и question, поэтому композиция
+ *  визуально симметрична относительно центра.
+ *  0.4em — плотный «пакет», как один логический заголовок. */
+const ROW_GAP = '0.4em'
 
 export function S0Intro() {
   const { t } = useTranslation()
@@ -43,7 +47,6 @@ export function S0Intro() {
   const triggerRef  = useRef<HTMLSpanElement>(null)
   const clipWrapRef = useRef<HTMLSpanElement>(null)
   const clipTextRef = useRef<HTMLSpanElement>(null)
-  const qTextRef    = useRef<HTMLSpanElement>(null)
 
   const [isStateB, setIsStateB] = useState(false)
   const palette = isStateB ? PALETTE_B : PALETTE_A
@@ -67,7 +70,7 @@ export function S0Intro() {
   })
 
   const r0 = useSplitReveal({ trigger: true, delay: 0.05, stagger: 0.3, duration: 0.9 })
-  const r1 = useSplitReveal({ trigger: true, delay: 0.1, stagger: 0.3, duration: 0.9 })
+  const r2 = useSplitReveal({ trigger: true, delay: 0.15, stagger: 0.3, duration: 0.9 })
 
   /** Вход: до первого paint задаём закрытое состояние и сразу анимируем (иначе clip + GSAP дают «пустую» плашку) */
   useLayoutEffect(() => {
@@ -96,54 +99,20 @@ export function S0Intro() {
     lineHeight: HEADLINE_LINE_HEIGHT,
   } as const
 
-  const h2Base = {
-    className: 'font-sans font-black leading-none m-0',
-    style: {
-      ...headlineStyle,
-      color: palette.text,
-      transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-    } as const,
-  }
+  const colorTransition = 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)'
 
-  const pillBlock = (
-    <span
-      ref={triggerRef}
-      className="inline-flex cursor-pointer items-center self-center"
-      style={{ pointerEvents: 'all' as const }}
-      onMouseEnter={() => { startHold(); set('pointer') }}
-      onMouseLeave={() => { stopHold(); set('default') }}
-      onTouchStart={(e) => { e.preventDefault(); startHold() }}
-      onTouchEnd={() => stopHold()}
-    >
-      <span
-        ref={clipWrapRef}
-        className="inline-flex overflow-hidden rounded-sm"
-        style={{
-          backgroundColor: palette.clipBg,
-          clipPath: CLIP_OPEN,
-          transition: 'background-color 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      >
-        <span
-          ref={clipTextRef}
-          className="inline-block min-w-[8ch] px-[0.18em] font-sans font-black"
-          style={{
-            fontSize: HEADLINE_SIZE,
-            lineHeight: HEADLINE_LINE_HEIGHT,
-            color: palette.clipText,
-            transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          {clipWord}
-        </span>
-      </span>
-    </span>
-  )
+  // Базовые стили для строк, которые расположены absolute относительно
+  // плашки — а сама плашка ВСЕГДА в геометрическом центре секции. Так
+  // обеспечивается отсутствие layout shift между state A и state B.
+  const sideLine = {
+    className: 'font-sans font-black leading-none m-0 absolute left-1/2 -translate-x-1/2 whitespace-nowrap',
+    style: { ...headlineStyle, color: palette.text, transition: colorTransition },
+  } as const
 
   return (
     <motion.section
       ref={sectionRef}
-      className="fixed inset-0 flex flex-col items-center justify-center px-[60px] text-center"
+      className="fixed inset-0 flex items-center justify-center px-[60px] text-center"
       variants={sectionVariants}
       initial="initial"
       animate="animate"
@@ -161,79 +130,86 @@ export function S0Intro() {
         style={{ zIndex: 1 }}
       />
 
+      {/* Композиция вокруг геометрического центра.
+          - Плашка с плашкой — это inline-flex по центру; она задаёт центр.
+          - Label выезжает вверх через absolute (bottom: 100% + gap).
+          - Question — вниз (top: 100% + gap).
+          Высота плашки = базовая высота line-height, поэтому центр плашки
+          совпадает с центром секции; смена текста вокруг не двигает её. */}
       <div
-        className="relative z-10 flex flex-col items-center justify-center"
-        style={{ pointerEvents: 'none', gap: 0 }}
+        className="relative z-10 flex items-center justify-center"
+        style={{ pointerEvents: 'none' }}
       >
-        {isStateB ? (
-          <div
-            className="flex flex-col items-center"
-            style={{
-              pointerEvents: 'none',
-              gap: 0,
-              transform: `translateY(${MINT_STACK_NUDGE_Y})`,
-            }}
+        {/* Label — выше плашки */}
+        <h2
+          ref={r0 as any}
+          {...sideLine}
+          style={{
+            ...sideLine.style,
+            bottom: `calc(100% + ${ROW_GAP})`,
+          }}
+        >
+          {labelText}
+        </h2>
+
+        {/* Центральная строка: «Это» + плашка со словом */}
+        <div
+          className="flex flex-wrap items-center justify-center gap-[0.25em]"
+          style={headlineStyle}
+        >
+          <h2
+            className="font-sans font-black m-0 inline leading-none"
+            style={{ color: palette.text, transition: colorTransition }}
           >
-            {/* Строка 1: or is it... */}
-            <h2 ref={r0 as any} {...h2Base}>
-              {labelText}
-            </h2>
-            {/* Строка 2: It's + Mint — та же логическая строка, что Lavender + вопрос в A */}
-            <div
-              className="flex flex-wrap items-center justify-center gap-[0.25em]"
-              style={headlineStyle}
-            >
-              <h2 ref={r1 as any} className="font-sans font-black m-0 inline leading-none" style={{ color: palette.text, transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-                {t('s0.pre')}
-              </h2>
-              {pillBlock}
-            </div>
-            {/* Строка 3: wait, what? */}
-            <h2
-              className="font-sans font-black m-0 leading-none overflow-hidden"
-              style={{ ...headlineStyle, color: palette.text, transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
+            {t('s0.pre')}
+          </h2>
+
+          <span
+            ref={triggerRef}
+            className="inline-flex cursor-pointer items-center self-center"
+            style={{ pointerEvents: 'all' as const }}
+            onMouseEnter={() => { startHold(); set('pointer') }}
+            onMouseLeave={() => { stopHold(); set('default') }}
+            onTouchStart={(e) => { e.preventDefault(); startHold() }}
+            onTouchEnd={() => stopHold()}
+          >
+            <span
+              ref={clipWrapRef}
+              className="inline-flex overflow-hidden rounded-sm"
+              style={{
+                backgroundColor: palette.clipBg,
+                clipPath: CLIP_OPEN,
+                transition: 'background-color 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
             >
               <span
-                ref={qTextRef}
-                className="inline-block"
+                ref={clipTextRef}
+                className="inline-block min-w-[8ch] px-[0.18em] font-sans font-black"
+                style={{
+                  fontSize: HEADLINE_SIZE,
+                  lineHeight: HEADLINE_LINE_HEIGHT,
+                  color: palette.clipText,
+                  transition: colorTransition,
+                }}
               >
-                {questionText}
+                {clipWord}
               </span>
-            </h2>
-          </div>
-        ) : (
-          <>
-            <h2 ref={r0 as any} {...h2Base}>
-              {labelText}
-            </h2>
-            <div
-              className="flex flex-wrap items-center justify-center gap-[0.25em]"
-              style={headlineStyle}
-            >
-              <h2 ref={r1 as any} className="font-sans font-black m-0 inline leading-none" style={{ color: palette.text, transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-                {t('s0.pre')}
-              </h2>
-              {pillBlock}
-              <span
-                className="relative inline-block overflow-hidden leading-none"
-                style={{ fontSize: HEADLINE_SIZE, lineHeight: HEADLINE_LINE_HEIGHT }}
-              >
-                <span
-                  ref={qTextRef}
-                  className="inline-block font-sans font-black leading-none"
-                  style={{
-                    color: palette.text,
-                    fontSize: 'inherit',
-                    lineHeight: HEADLINE_LINE_HEIGHT,
-                    transition: 'color 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }}
-                >
-                  {questionText}
-                </span>
-              </span>
-            </div>
-          </>
-        )}
+            </span>
+          </span>
+        </div>
+
+        {/* Question — ниже плашки */}
+        <h2
+          {...sideLine}
+          style={{
+            ...sideLine.style,
+            top: `calc(100% + ${ROW_GAP})`,
+          }}
+        >
+          <span ref={r2 as any} className="inline-block">
+            {questionText}
+          </span>
+        </h2>
       </div>
     </motion.section>
   )

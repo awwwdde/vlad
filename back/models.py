@@ -180,6 +180,23 @@ class ContactMessage(Base):
     )
 
 
+class SiteSetting(Base):
+    """Простой KV-стор для настроек публичной части (видимость сайта,
+    глобальные флаги, контактный email в футере и т.п.).
+
+    Значения хранятся как строки. Типизация — на уровне фронта/эндпоинта;
+    булевы кладём как "true"/"false". Изменяется через /api/site/settings.
+    """
+
+    __tablename__ = "site_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Translation(Base):
     """Локализационный бандл одного языка целиком в одной JSONB-колонке.
 
