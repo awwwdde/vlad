@@ -187,24 +187,38 @@ def run_app(
     *,
     secret_key: str,
     jwt_secret: str,
+    extra_env: dict[str, str] | None = None,
 ) -> str:
+    """Поднять app-контейнер гостя.
+
+    Базовый env (DATABASE_URL/SECRET_KEY/JWT_SECRET/PUBLIC_SITE_URL) формируется
+    автоматически. `extra_env` — пользовательский набор из ProjectEnvVar
+    (BOOTSTRAP_ADMIN_*, TG_BOT_TOKEN и пр.). Пользовательские ключи **могут
+    перебивать дефолты** — это намеренно (например, если кто-то хочет
+    зафиксировать свой PUBLIC_SITE_URL).
+    """
     app_container, _, _, _ = _names(slug)
     _remove_container(app_container)  # пересоздаём начисто на каждый деплой
+
+    environment: dict[str, str] = {
+        "DATABASE_URL": database_url,
+        "PUBLIC_SITE_URL": f"https://{slug}.{settings.base_domain}",
+        # Базовые секреты, которых гость почти всегда хочет (pydantic-settings
+        # типично требует их обязательными). Стабильны между деплоями —
+        # хранятся в Project и переживают пересоздание контейнера.
+        "SECRET_KEY": secret_key,
+        "JWT_SECRET": jwt_secret,
+    }
+    if extra_env:
+        environment.update(extra_env)
+
     client().containers.run(
         image=image_tag,
         name=app_container,
         detach=True,
         restart_policy={"Name": "unless-stopped"},
         network=settings.docker_network,
-        environment={
-            "DATABASE_URL": database_url,
-            "PUBLIC_SITE_URL": f"https://{slug}.{settings.base_domain}",
-            # Базовые секреты, которых гость почти всегда хочет (pydantic-settings
-            # типично требует их обязательными). Стабильны между деплоями —
-            # хранятся в Project и переживают пересоздание контейнера.
-            "SECRET_KEY": secret_key,
-            "JWT_SECRET": jwt_secret,
-        },
+        environment=environment,
     )
     return app_container
 

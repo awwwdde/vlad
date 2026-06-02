@@ -4,9 +4,19 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
 
@@ -73,6 +83,43 @@ class Project(Base):
             f"postgresql://{self.slug}:{self.db_password}"
             f"@{self.db_container}:5432/{self.slug}"
         )
+
+    # Произвольные env-переменные, заданные пользователем через UI.
+    # Прокидываются в app-контейнер при деплое поверх дефолтов
+    # (DATABASE_URL/SECRET_KEY и пр.). Удобно для BOOTSTRAP_ADMIN_*,
+    # TG_BOT_TOKEN и любых других ключей конкретного гостя.
+    env_vars: Mapped[list["ProjectEnvVar"]] = relationship(
+        "ProjectEnvVar",
+        cascade="all, delete-orphan",
+        back_populates="project",
+        lazy="selectin",
+    )
+
+
+class ProjectEnvVar(Base):
+    """Одна env-переменная конкретного гостя. Значение в БД — зашифровано
+    Fernet'ом (см. back/secrets_box.py), наружу отдаётся либо masked, либо
+    в plaintext через явный reveal-эндпоинт."""
+
+    __tablename__ = "project_env_vars"
+    __table_args__ = (
+        UniqueConstraint("project_id", "key", name="uq_project_env_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(120))
+    value_encrypted: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    project: Mapped["Project"] = relationship("Project", back_populates="env_vars")
 
 
 class PortfolioItem(Base):

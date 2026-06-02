@@ -80,3 +80,14 @@ export interface ContactMessage {
   created_at: string
 }
 
+export interface EnvVar {
+  key: string
+  value_preview: string
+  updated_at: string
+}
+
+export interface EnvVarReveal {
+  key: string
+  value: string
+}
+

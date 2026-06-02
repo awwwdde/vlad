@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(...)
     jwt_ttl_hours: int = 12
 
+    # Master-ключ для симметричного шифрования env-vars гостей в БД.
+    # Fernet-совместимый: base64-urlsafe от 32 байт.
+    # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # ВНИМАНИЕ: при потере все хранимые env-vars становятся нечитаемыми.
+    env_encryption_key: str = Field(...)
+
 
 @lru_cache
 def get_settings() -> Settings:

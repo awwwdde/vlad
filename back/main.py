@@ -26,12 +26,14 @@ import auth as auth_mod
 import caddy
 import engine
 import ratelimit
+import secrets_box
 from config import settings
 from db import get_db, init_db
 from models import (
     ContactMessage,
     PortfolioItem,
     Project,
+    ProjectEnvVar,
     ProjectStatus,
     Translation,
     User,
@@ -41,6 +43,10 @@ from schemas import (
     ContactMessageIn,
     ContactMessageOut,
     DeployRequest,
+    EnvVarIn,
+    EnvVarOut,
+    EnvVarReveal,
+    EnvVarsBulk,
     LoginRequest,
     LoginResponse,
     MessagePatch,
@@ -52,6 +58,7 @@ from schemas import (
     TranslationIn,
     TranslationOut,
     UserOut,
+    _check_env_key,
 )
 from seed_portfolio import seed_if_empty as seed_portfolio_if_empty
 from seed_translations import seed_if_empty as seed_translations_if_empty
@@ -220,12 +227,28 @@ def deploy_project(
         db.commit()
 
         engine.ensure_db(slug, proj.db_password)
+
+        # Подтягиваем пользовательские env-vars: расшифровываем и складываем
+        # в обычный dict, который engine передаст внутрь app-контейнера.
+        extra_env: dict[str, str] = {}
+        for ev in proj.env_vars:
+            try:
+                extra_env[ev.key] = secrets_box.decrypt(ev.value_encrypted)
+            except Exception as exc:  # noqa: BLE001
+                # Один битый ключ не должен валить весь деплой — логируем и
+                # пропускаем; имя ключа в last_error, чтобы user знал что чинить.
+                raise engine.DeployError(
+                    f"не удалось расшифровать env-vars[{ev.key}] — "
+                    f"проверь ENV_ENCRYPTION_KEY в .env панели ({exc})"
+                ) from exc
+
         engine.run_app(
             slug,
             image_tag,
             proj.database_url,
             secret_key=proj.secret_key,
             jwt_secret=proj.jwt_secret,
+            extra_env=extra_env,
         )
         engine.wait_healthy(slug)
 
@@ -258,6 +281,114 @@ def stop(
     db.commit()
     db.refresh(proj)
     return ActionResult(ok=True, project=proj, message="Остановлен")
+
+
+# ── Пользовательские env-vars гостя ─────────────────────────────────────────
+# Изменения применяются при следующем deploy: контейнер передаётся новый набор
+# env. Изменения сами по себе не рестартят контейнер — это намеренно, чтобы
+# можно было набрать несколько ключей и зайти одним передеплоем.
+
+def _env_to_out(ev: ProjectEnvVar) -> EnvVarOut:
+    """Расшифровать значение и отдать его в виде маски."""
+    try:
+        plain = secrets_box.decrypt(ev.value_encrypted)
+        preview = secrets_box.mask(plain)
+    except Exception:  # noqa: BLE001
+        preview = "(не удалось расшифровать)"
+    return EnvVarOut(key=ev.key, value_preview=preview, updated_at=ev.updated_at)
+
+
+@app.get("/api/projects/{slug}/env", response_model=list[EnvVarOut])
+def env_list(
+    slug: str,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> list[EnvVarOut]:
+    proj = _get_project(db, slug)
+    return [_env_to_out(ev) for ev in sorted(proj.env_vars, key=lambda e: e.key)]
+
+
+@app.get("/api/projects/{slug}/env/{key}/reveal", response_model=EnvVarReveal)
+def env_reveal(
+    slug: str,
+    key: str,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> EnvVarReveal:
+    """Одноразовая выдача plaintext-значения. Не кэшировать на фронте."""
+    proj = _get_project(db, slug)
+    ev = next((e for e in proj.env_vars if e.key == key), None)
+    if not ev:
+        raise HTTPException(status_code=404, detail="ключ не найден")
+    return EnvVarReveal(key=ev.key, value=secrets_box.decrypt(ev.value_encrypted))
+
+
+@app.put("/api/projects/{slug}/env/{key}", response_model=EnvVarOut)
+def env_put(
+    slug: str,
+    key: str,
+    payload: EnvVarIn,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> EnvVarOut:
+    key = _check_env_key(key)
+    proj = _get_project(db, slug)
+    ev = next((e for e in proj.env_vars if e.key == key), None)
+    encrypted = secrets_box.encrypt(payload.value)
+    if ev:
+        ev.value_encrypted = encrypted
+    else:
+        ev = ProjectEnvVar(project_id=proj.id, key=key, value_encrypted=encrypted)
+        db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    return _env_to_out(ev)
+
+
+@app.delete("/api/projects/{slug}/env/{key}")
+def env_delete(
+    slug: str,
+    key: str,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> dict:
+    proj = _get_project(db, slug)
+    ev = next((e for e in proj.env_vars if e.key == key), None)
+    if not ev:
+        raise HTTPException(status_code=404, detail="ключ не найден")
+    db.delete(ev)
+    db.commit()
+    return {"ok": True}
+
+
+@app.put("/api/projects/{slug}/env", response_model=list[EnvVarOut])
+def env_bulk(
+    slug: str,
+    payload: EnvVarsBulk,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> list[EnvVarOut]:
+    """Полная замена набора env-vars проекта (что прислали — то и осталось)."""
+    proj = _get_project(db, slug)
+    incoming = {item.key: item.value for item in payload.items}
+    existing = {ev.key: ev for ev in proj.env_vars}
+
+    # Удалить то, чего больше нет.
+    for key, ev in existing.items():
+        if key not in incoming:
+            db.delete(ev)
+
+    # Создать новые / обновить существующие.
+    for key, value in incoming.items():
+        encrypted = secrets_box.encrypt(value)
+        if key in existing:
+            existing[key].value_encrypted = encrypted
+        else:
+            db.add(ProjectEnvVar(project_id=proj.id, key=key, value_encrypted=encrypted))
+
+    db.commit()
+    db.refresh(proj)
+    return [_env_to_out(ev) for ev in sorted(proj.env_vars, key=lambda e: e.key)]
 
 
 # ── Контент: портфолио ───────────────────────────────────────────────────────

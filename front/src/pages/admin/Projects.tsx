@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api, ApiError } from '@/admin/api'
-import type { ActionResult, Project } from '@/admin/types'
+import type { ActionResult, EnvVar, EnvVarReveal, Project } from '@/admin/types'
 import { STATUS_META } from './projectStatus'
 
 type Busy = Record<string, string | undefined>  // slug → текущее действие
@@ -11,6 +11,7 @@ export default function Projects() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<Busy>({})
   const [logsFor, setLogsFor] = useState<Project | null>(null)
+  const [envFor, setEnvFor] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
 
   const reload = useCallback(() => {
@@ -104,6 +105,7 @@ export default function Projects() {
               )
             }
             onLogs={() => setLogsFor(p)}
+            onEnv={() => setEnvFor(p)}
             onDelete={(dropData) =>
               act(p.slug, 'delete', async () => {
                 await api(`/api/projects/${p.slug}`, {
@@ -130,6 +132,22 @@ export default function Projects() {
         {logsFor && (
           <LogsModal project={logsFor} onClose={() => setLogsFor(null)} />
         )}
+        {envFor && (
+          <EnvModal
+            project={envFor}
+            onClose={() => setEnvFor(null)}
+            onRedeploy={() => {
+              const slug = envFor.slug
+              setEnvFor(null)
+              act(slug, 'deploy', () =>
+                api<ActionResult>(`/api/projects/${slug}/deploy`, {
+                  method: 'POST',
+                  body: {},
+                }),
+              )
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
   )
@@ -144,6 +162,7 @@ function ProjectCard(props: {
   onStop: () => void
   onStart: () => void
   onLogs: () => void
+  onEnv: () => void
   onDelete: (dropData: boolean) => void
 }) {
   const { project: p, busy } = props
@@ -197,6 +216,9 @@ function ProjectCard(props: {
         )}
         <Btn onClick={props.onLogs} disabled={inFlight} variant="ghost">
           Логи
+        </Btn>
+        <Btn onClick={props.onEnv} disabled={inFlight} variant="ghost">
+          .env
         </Btn>
         <div className="flex-1" />
         <Btn
@@ -394,6 +416,261 @@ function Field(props: { label: string; hint?: string; children: React.ReactNode 
       {props.children}
       {props.hint && <span className="block text-xs text-neutral-600">{props.hint}</span>}
     </label>
+  )
+}
+
+// ── Модалка: env-vars гостя ─────────────────────────────────────────────────
+// Полный CRUD по ключам, превью значения замаскировано (••••), значение
+// можно «подсмотреть» через GET /env/{key}/reveal — один раз, без кэша.
+// Preset «Bootstrap-админ» заполняет BOOTSTRAP_ADMIN_EMAIL + случайный пароль.
+
+function EnvModal({
+  project,
+  onClose,
+  onRedeploy,
+}: {
+  project: Project
+  onClose: () => void
+  onRedeploy: () => void
+}) {
+  const [vars, setVars] = useState<EnvVar[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [newKey, setNewKey] = useState('')
+  const [newValue, setNewValue] = useState('')
+
+  const reload = useCallback(() => {
+    api<EnvVar[]>(`/api/projects/${project.slug}/env`)
+      .then(setVars)
+      .catch(e => setError(e.message ?? String(e)))
+  }, [project.slug])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  async function save(key: string, value: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api<EnvVar>(`/api/projects/${project.slug}/env/${key}`, {
+        method: 'PUT',
+        body: { value },
+      })
+      reload()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(key: string) {
+    if (!window.confirm(`Удалить ${key}?`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/api/projects/${project.slug}/env/${key}`, { method: 'DELETE' })
+      reload()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addNew(e: FormEvent) {
+    e.preventDefault()
+    const key = newKey.trim().toUpperCase()
+    if (!key) return
+    await save(key, newValue)
+    setNewKey('')
+    setNewValue('')
+  }
+
+  // Preset: создаёт BOOTSTRAP_ADMIN_EMAIL + BOOTSTRAP_ADMIN_PASSWORD с
+  // случайно сгенерированным паролем (16 символов). Email берёт от user'а.
+  async function presetBootstrap() {
+    const email = window.prompt(
+      'Email для первого админа под-сайта:',
+      `admin@${project.domain}`,
+    )?.trim()
+    if (!email) return
+    // crypto-strong рандом, base62-ish.
+    const buf = new Uint8Array(12)
+    crypto.getRandomValues(buf)
+    const pw = btoa(String.fromCharCode(...buf))
+      .replace(/[+/=]/g, '')
+      .slice(0, 16)
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/api/projects/${project.slug}/env/BOOTSTRAP_ADMIN_EMAIL`, {
+        method: 'PUT',
+        body: { value: email },
+      })
+      await api(`/api/projects/${project.slug}/env/BOOTSTRAP_ADMIN_PASSWORD`, {
+        method: 'PUT',
+        body: { value: pw },
+      })
+      reload()
+      window.alert(
+        `Создано:\n\nemail: ${email}\nпароль: ${pw}\n\n` +
+          'Сохрани пароль ОТДЕЛЬНО — после передеплоя его уже нельзя будет ' +
+          'посмотреть без расшифровки. После «Применить и передеплоить» войди ' +
+          `по этим данным на https://${project.domain}/admin (или куда у тебя ` +
+          'смотрит админка под-сайта).',
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function revealValue(key: string) {
+    try {
+      const r = await api<EnvVarReveal>(
+        `/api/projects/${project.slug}/env/${key}/reveal`,
+      )
+      // Кладём в clipboard сразу — модалка не показывает plaintext.
+      await navigator.clipboard.writeText(r.value).catch(() => {
+        /* fallback ниже */
+      })
+      window.alert(
+        `Значение ${key} скопировано в буфер обмена. ` +
+          'Если буфер не сработал — вот оно:\n\n' +
+          r.value,
+      )
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={`Env · ${project.slug}`} wide>
+      <p className="text-xs text-neutral-500 mb-4">
+        Произвольные переменные окружения, которые передаются в контейнер
+        под-сайта при деплое. <code>DATABASE_URL</code>,{' '}
+        <code>SECRET_KEY</code>, <code>JWT_SECRET</code>,{' '}
+        <code>PUBLIC_SITE_URL</code> — управляются панелью автоматически,{' '}
+        их перебивать не нужно (но можно, если очень хочется).
+      </p>
+
+      {/* Текущие ключи */}
+      <div className="space-y-2 mb-5">
+        {vars === null && <div className="text-sm text-neutral-500">Загрузка…</div>}
+        {vars?.length === 0 && (
+          <div className="text-sm text-neutral-600 text-center py-6 border border-dashed border-neutral-800 rounded-lg">
+            Пусто. Используй форму ниже или preset.
+          </div>
+        )}
+        {vars?.map(ev => (
+          <div
+            key={ev.key}
+            className="flex items-center gap-3 rounded-lg border border-neutral-900 bg-neutral-950/40 px-3 py-2"
+          >
+            <code className="font-mono text-sm text-neutral-100 min-w-0 truncate">
+              {ev.key}
+            </code>
+            <code className="font-mono text-xs text-neutral-500 flex-1 truncate">
+              {ev.value_preview}
+            </code>
+            <button
+              onClick={() => revealValue(ev.key)}
+              className="rounded-md px-2 py-1 text-xs text-neutral-400 hover:text-neutral-100"
+              title="скопировать plaintext в буфер"
+            >
+              copy
+            </button>
+            <button
+              onClick={() => remove(ev.key)}
+              className="rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-950/40"
+              disabled={busy}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Preset */}
+      <div className="mb-4 rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-emerald-300">
+              Bootstrap-админ под-сайта
+            </div>
+            <div className="text-xs text-neutral-500 mt-0.5">
+              Создаст <code>BOOTSTRAP_ADMIN_EMAIL</code> и{' '}
+              <code>BOOTSTRAP_ADMIN_PASSWORD</code> со случайным паролем.
+              Сам сайт прочитает их при следующем деплое и заведёт пользователя.
+            </div>
+          </div>
+          <button
+            onClick={presetBootstrap}
+            disabled={busy}
+            className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50 whitespace-nowrap"
+          >
+            Создать
+          </button>
+        </div>
+      </div>
+
+      {/* Добавить вручную */}
+      <form onSubmit={addNew} className="grid grid-cols-[1fr_2fr_auto] gap-2 mb-4">
+        <input
+          required
+          placeholder="KEY"
+          value={newKey}
+          onChange={e => setNewKey(e.target.value.toUpperCase())}
+          className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm font-mono"
+        />
+        <input
+          required
+          placeholder="value"
+          value={newValue}
+          onChange={e => setNewValue(e.target.value)}
+          className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm font-mono"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+        >
+          +
+        </button>
+      </form>
+
+      {error && (
+        <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2 text-sm text-red-300 mb-4">
+          {error}
+        </div>
+      )}
+
+      <div className="flex justify-between items-center pt-3 border-t border-neutral-900">
+        <p className="text-xs text-neutral-600">
+          Изменения применятся при следующем деплое.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:text-neutral-100"
+          >
+            Закрыть
+          </button>
+          <button
+            type="button"
+            onClick={onRedeploy}
+            disabled={busy}
+            className="rounded-md bg-neutral-100 px-4 py-1.5 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+          >
+            Применить и передеплоить
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

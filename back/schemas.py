@@ -180,3 +180,67 @@ class ContactMessageOut(BaseModel):
 
 class MessagePatch(BaseModel):
     is_read: bool
+
+
+# ── Env-vars гостя ──────────────────────────────────────────────────────────
+
+# Имена в стиле SCREAMING_SNAKE и до 120 символов (как и в обычных Linux ENV).
+_ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,119}$")
+
+
+class EnvVarIn(BaseModel):
+    """Тело PUT /api/projects/{slug}/env/{key} либо элемент bulk-апсёрта."""
+
+    value: str
+
+    @field_validator("value")
+    @classmethod
+    def _value(cls, v: str) -> str:
+        # Не trimим — иногда хвостовые пробелы значимы (например для PEM-ключей).
+        if len(v) > 8000:
+            raise ValueError("значение слишком длинное (>8000)")
+        return v
+
+
+class EnvVarOut(BaseModel):
+    """Что отдаём в UI. Без plaintext — только маска. Реальное значение
+    получают отдельным запросом с ?reveal=true."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    value_preview: str  # masked
+    updated_at: datetime
+
+
+class EnvVarReveal(BaseModel):
+    """Ответ на reveal-запрос — plaintext один раз. На фронте лучше не
+    кэшировать, не логировать, не отображать долго."""
+
+    key: str
+    value: str
+
+
+def _check_env_key(v: str) -> str:
+    v = v.strip()
+    if not _ENV_KEY_RE.match(v):
+        raise ValueError(
+            "ключ env: только A-Z, 0-9, _; должен начинаться с буквы или _"
+        )
+    return v
+
+
+class EnvVarBulkItem(BaseModel):
+    key: str
+    value: str
+
+    @field_validator("key")
+    @classmethod
+    def _key(cls, v: str) -> str:
+        return _check_env_key(v)
+
+
+class EnvVarsBulk(BaseModel):
+    """Заменяет весь набор env-vars проекта на переданный."""
+
+    items: list[EnvVarBulkItem]

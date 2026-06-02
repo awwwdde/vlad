@@ -16,3 +16,5 @@ rich==13.9.4
 # Auth: bcrypt-хэши паролей + JWT для веб-админки.
 bcrypt==5.0.0
 PyJWT==2.10.1
+# Шифрование env-переменных гостей (ProjectEnvVar.value_encrypted).
+cryptography==44.0.0

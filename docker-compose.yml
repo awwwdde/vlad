@@ -52,6 +52,7 @@ services:
       WORKSPACES_DIR: /workspaces
       API_TOKEN: ${API_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
+      ENV_ENCRYPTION_KEY: ${ENV_ENCRYPTION_KEY}
     volumes:
       # Управление контейнерами хоста.
       - /var/run/docker.sock:/var/run/docker.sock
