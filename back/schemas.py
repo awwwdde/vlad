@@ -39,8 +39,35 @@ class ProjectOut(BaseModel):
     status: ProjectStatus
     last_error: str | None
     domain: str
+    custom_domains: list[str] = []
     created_at: datetime
     deployed_at: datetime | None
+
+
+# Домен: ASCII-хост (для кириллических доменов — punycode/xn--). 1–253 символа,
+# метки 1–63, разрешены a-z 0-9 дефис (не по краям метки), минимум одна точка.
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$"
+)
+
+
+class DomainIn(BaseModel):
+    """Тело POST /api/projects/{slug}/domains — один кастомный домен."""
+
+    domain: str
+
+    @field_validator("domain")
+    @classmethod
+    def _domain(cls, v: str) -> str:
+        v = v.strip().lower()
+        # На случай если вставили со схемой/путём/www-точкой в конце.
+        v = re.sub(r"^https?://", "", v).split("/")[0].rstrip(".")
+        if not _DOMAIN_RE.match(v):
+            raise ValueError(
+                "некорректный домен (ожидается host вида example.ru; "
+                "для кириллических — в формате punycode xn--…)"
+            )
+        return v
 
 
 class DeployRequest(BaseModel):

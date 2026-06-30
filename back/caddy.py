@@ -38,10 +38,13 @@ def _id_url(slug: str) -> str:
     return f"{settings.caddy_admin_url}/id/{_route_id(slug)}"
 
 
-def _build_route(slug: str, upstream: str) -> dict:
+def _build_route(slug: str, upstream: str, domains: list[str] | None = None) -> dict:
+    # Хосты маршрута: базовый <slug>.awwwdde.art + кастомные домены гостя.
+    # Caddy сам выпустит каждому HTTP-01 TLS, когда домен укажет на этот сервер.
+    hosts = [f"{slug}.{settings.base_domain}", *(domains or [])]
     return {
         "@id": _route_id(slug),
-        "match": [{"host": [f"{slug}.{settings.base_domain}"]}],
+        "match": [{"host": hosts}],
         "handle": [
             {
                 "handler": "reverse_proxy",
@@ -52,14 +55,20 @@ def _build_route(slug: str, upstream: str) -> dict:
     }
 
 
-def upsert_route(slug: str, upstream: str | None = None) -> None:
+def upsert_route(
+    slug: str,
+    upstream: str | None = None,
+    domains: list[str] | None = None,
+) -> None:
     """Создать или обновить маршрут проекта.
 
     upstream по умолчанию — "<slug>_app:<guest_app_port>".
+    domains — кастомные домены, которые добавляются в host-матчер помимо
+    базового поддомена.
     """
     if upstream is None:
         upstream = f"{slug}_app:{settings.guest_app_port}"
-    route = _build_route(slug, upstream)
+    route = _build_route(slug, upstream, domains)
 
     with httpx.Client(timeout=10.0) as client:
         # Уже есть маршрут с таким @id? — заменяем целиком (PATCH по /id/...).

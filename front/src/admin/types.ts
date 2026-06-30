@@ -17,6 +17,7 @@ export interface Project {
   status: ProjectStatus
   last_error: string | null
   domain: string
+  custom_domains: string[]
   created_at: string
   deployed_at: string | null
 }

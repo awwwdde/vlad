@@ -61,3 +61,7 @@ def init_db() -> None:
         conn.execute(text(
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS jwt_secret VARCHAR(120)"
         ))
+        conn.execute(text(
+            "ALTER TABLE projects ADD COLUMN IF NOT EXISTS custom_domains "
+            "JSONB NOT NULL DEFAULT '[]'::jsonb"
+        ))

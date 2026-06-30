@@ -63,6 +63,13 @@ class Project(Base):
     secret_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
     jwt_secret: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # Кастомные домены гостя (помимо <slug>.awwwdde.art). Список строк-хостов;
+    # прокидываются в host-матчер маршрута Caddy, который сам выпускает им
+    # HTTP-01 TLS, как только домен зарезолвится на этот сервер.
+    custom_domains: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default="[]", nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -75,6 +82,11 @@ class Project(Base):
         from config import settings
 
         return f"{self.slug}.{settings.base_domain}"
+
+    @property
+    def all_domains(self) -> list[str]:
+        """Базовый поддомен + кастомные домены — все хосты, на которые отвечает проект."""
+        return [self.domain, *(self.custom_domains or [])]
 
     @property
     def database_url(self) -> str:

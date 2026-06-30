@@ -44,6 +44,7 @@ from schemas import (
     ContactMessageIn,
     ContactMessageOut,
     DeployRequest,
+    DomainIn,
     EnvVarIn,
     EnvVarOut,
     EnvVarReveal,
@@ -187,6 +188,72 @@ def get_project(
     return _get_project(db, slug)
 
 
+# ── Кастомные домены проекта ─────────────────────────────────────────────────
+# Домен сохраняется в проекте и сразу прописывается в host-матчер Caddy.
+# Caddy выпустит ему TLS-сертификат, как только домен зарезолвится на сервер
+# (A-запись на IP этого хоста). Поддомены *.awwwdde.art — не трогаем.
+
+@app.post("/api/projects/{slug}/domains", response_model=ProjectOut)
+def add_domain(
+    slug: str,
+    payload: DomainIn,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> Project:
+    proj = _get_project(db, slug)
+    domain = payload.domain
+
+    if domain == settings.base_domain or domain.endswith("." + settings.base_domain):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Домены *.{settings.base_domain} управляются панелью автоматически",
+        )
+
+    # Уникальность среди всех проектов.
+    for other in db.scalars(select(Project)):
+        if domain in (other.custom_domains or []):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Домен уже привязан к проекту '{other.slug}'",
+            )
+
+    current = list(proj.custom_domains or [])
+    if domain not in current:
+        current.append(domain)
+
+    # Сначала применяем в Caddy, потом сохраняем в БД — так конфиг прокси и БД
+    # остаются согласованными (если Caddy не принял — домен не сохраняем).
+    try:
+        caddy.upsert_route(slug, domains=current)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Caddy: {exc}") from exc
+
+    proj.custom_domains = current  # переприсваиваем — иначе SQLAlchemy не заметит мутацию JSONB
+    db.commit()
+    db.refresh(proj)
+    return proj
+
+
+@app.delete("/api/projects/{slug}/domains/{domain}", response_model=ProjectOut)
+def remove_domain(
+    slug: str,
+    domain: str,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> Project:
+    proj = _get_project(db, slug)
+    domain = domain.strip().lower().rstrip(".")
+    current = [d for d in (proj.custom_domains or []) if d != domain]
+    try:
+        caddy.upsert_route(slug, domains=current)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Caddy: {exc}") from exc
+    proj.custom_domains = current
+    db.commit()
+    db.refresh(proj)
+    return proj
+
+
 @app.delete("/api/projects/{slug}", response_model=ActionResult)
 def delete_project(
     slug: str,
@@ -275,7 +342,7 @@ def deploy_project(
         )
         engine.wait_healthy(slug)
 
-        caddy.upsert_route(slug)
+        caddy.upsert_route(slug, domains=proj.custom_domains)
 
         proj.status = ProjectStatus.running
         proj.deployed_at = datetime.now(timezone.utc)
@@ -688,7 +755,7 @@ def start(
 ) -> ActionResult:
     proj = _get_project(db, slug)
     engine.start_project(slug)
-    caddy.upsert_route(slug)
+    caddy.upsert_route(slug, domains=proj.custom_domains)
     proj.status = ProjectStatus.running
     db.commit()
     db.refresh(proj)

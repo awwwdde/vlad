@@ -24,6 +24,8 @@ from rich.table import Table
 app = typer.Typer(add_completion=False, help="Управление тестовыми деплоями awwwdde.")
 users_app = typer.Typer(help="Управление админ-пользователями панели (локально, через БД).")
 app.add_typer(users_app, name="user")
+domains_app = typer.Typer(help="Кастомные домены проектов.")
+app.add_typer(domains_app, name="domain")
 console = Console()
 
 API = os.environ.get("AWWWDDE_API", "http://localhost:8000")
@@ -123,6 +125,49 @@ def remove(
         if r.status_code != 200:
             _die(r)
     console.print(f"[red]X[/red] {slug} удалён" + (" вместе с БД" if drop_data else ""))
+
+
+# ── Кастомные домены ────────────────────────────────────────────────────────
+
+@domains_app.command("add")
+def domain_add(slug: str, domain: str) -> None:
+    """Привязать кастомный домен к проекту."""
+    with _client() as c:
+        r = c.post(f"/api/projects/{slug}/domains", json={"domain": domain})
+        if r.status_code != 200:
+            _die(r)
+        data = r.json()
+    doms = ", ".join(data.get("custom_domains") or []) or "—"
+    console.print(f"[green]OK[/green] домен привязан. Кастомные домены: {doms}")
+    console.print(
+        f"[dim]Дальше: A-запись {domain} → IP этого сервера. "
+        f"TLS Caddy выпустит автоматически после резолва DNS.[/dim]"
+    )
+
+
+@domains_app.command("rm")
+def domain_rm(slug: str, domain: str) -> None:
+    """Отвязать кастомный домен от проекта."""
+    with _client() as c:
+        r = c.delete(f"/api/projects/{slug}/domains/{domain}")
+        if r.status_code != 200:
+            _die(r)
+    console.print(f"[yellow]–[/yellow] домен {domain} отвязан от {slug}")
+
+
+@domains_app.command("list")
+def domain_list(slug: str) -> None:
+    """Показать домены проекта (базовый + кастомные)."""
+    with _client() as c:
+        r = c.get(f"/api/projects/{slug}")
+        if r.status_code != 200:
+            _die(r)
+        data = r.json()
+    table = Table("домен", "тип")
+    table.add_row(data["domain"], "базовый")
+    for d in data.get("custom_domains") or []:
+        table.add_row(d, "кастомный")
+    console.print(table)
 
 
 # ── Управление админ-юзерами ────────────────────────────────────────────────

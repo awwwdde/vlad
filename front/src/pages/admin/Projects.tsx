@@ -12,7 +12,15 @@ export default function Projects() {
   const [busy, setBusy] = useState<Busy>({})
   const [logsFor, setLogsFor] = useState<Project | null>(null)
   const [envFor, setEnvFor] = useState<Project | null>(null)
+  const [domainsFor, setDomainsFor] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
+
+  // Мёрдж обновлённого проекта (после добавления/удаления домена) в список и
+  // в открытую модалку доменов, чтобы UI сразу показывал актуальные домены.
+  const updateProject = useCallback((proj: Project) => {
+    setProjects(ps => (ps ?? []).map(p => (p.slug === proj.slug ? proj : p)))
+    setDomainsFor(cur => (cur && cur.slug === proj.slug ? proj : cur))
+  }, [])
 
   const reload = useCallback(() => {
     api<Project[]>('/api/projects')
@@ -106,6 +114,7 @@ export default function Projects() {
             }
             onLogs={() => setLogsFor(p)}
             onEnv={() => setEnvFor(p)}
+            onDomains={() => setDomainsFor(p)}
             onDelete={(dropData) =>
               act(p.slug, 'delete', async () => {
                 await api(`/api/projects/${p.slug}`, {
@@ -131,6 +140,13 @@ export default function Projects() {
         )}
         {logsFor && (
           <LogsModal project={logsFor} onClose={() => setLogsFor(null)} />
+        )}
+        {domainsFor && (
+          <DomainsModal
+            project={domainsFor}
+            onClose={() => setDomainsFor(null)}
+            onUpdated={updateProject}
+          />
         )}
         {envFor && (
           <EnvModal
@@ -163,11 +179,13 @@ function ProjectCard(props: {
   onStart: () => void
   onLogs: () => void
   onEnv: () => void
+  onDomains: () => void
   onDelete: (dropData: boolean) => void
 }) {
   const { project: p, busy } = props
   const meta = STATUS_META[p.status]
   const inFlight = busy !== undefined
+  const customDomains = p.custom_domains ?? []
 
   return (
     <motion.div
@@ -188,6 +206,21 @@ function ProjectCard(props: {
           >
             {p.domain} ↗
           </a>
+          {customDomains.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {customDomains.map(d => (
+                <a
+                  key={d}
+                  href={`https://${d}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-emerald-900/50 bg-emerald-950/30 px-2 py-0.5 text-xs text-emerald-300 hover:text-emerald-100"
+                >
+                  {d} ↗
+                </a>
+              ))}
+            </div>
+          )}
           {p.source && (
             <div className="mt-1 text-xs text-neutral-600 truncate">
               source: {p.source}
@@ -219,6 +252,9 @@ function ProjectCard(props: {
         </Btn>
         <Btn onClick={props.onEnv} disabled={inFlight} variant="ghost">
           .env
+        </Btn>
+        <Btn onClick={props.onDomains} disabled={inFlight} variant="ghost">
+          Домены
         </Btn>
         <div className="flex-1" />
         <Btn
@@ -670,6 +706,137 @@ function EnvModal({
           </button>
         </div>
       </div>
+    </Modal>
+  )
+}
+
+// ── Модалка: кастомные домены ───────────────────────────────────────────────
+// Привязка/отвязка доменов. Домен сразу прописывается в Caddy; TLS выпустится
+// автоматически, как только A-запись домена укажет на IP сервера.
+
+function DomainsModal({
+  project,
+  onClose,
+  onUpdated,
+}: {
+  project: Project
+  onClose: () => void
+  onUpdated: (p: Project) => void
+}) {
+  const [newDomain, setNewDomain] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const domains = project.custom_domains ?? []
+
+  async function add(e: FormEvent) {
+    e.preventDefault()
+    const domain = newDomain.trim().toLowerCase()
+    if (!domain) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api<Project>(`/api/projects/${project.slug}/domains`, {
+        method: 'POST',
+        body: { domain },
+      })
+      onUpdated(updated)
+      setNewDomain('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(domain: string) {
+    if (!window.confirm(`Отвязать домен ${domain}?`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api<Project>(
+        `/api/projects/${project.slug}/domains/${encodeURIComponent(domain)}`,
+        { method: 'DELETE' },
+      )
+      onUpdated(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={`Домены · ${project.slug}`}>
+      <p className="text-xs text-neutral-500 mb-4">
+        Базовый домен <code>{project.domain}</code> работает всегда. Кастомные
+        домены добавляй здесь — затем поставь у регистратора{' '}
+        <strong>A-запись домена на IP этого сервера</strong>. TLS-сертификат
+        Caddy выпустит автоматически после того, как DNS обновится.
+      </p>
+
+      {/* Базовый домен */}
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-neutral-900 bg-neutral-950/40 px-3 py-2">
+        <code className="font-mono text-sm text-neutral-300 flex-1 truncate">
+          {project.domain}
+        </code>
+        <span className="text-xs text-neutral-600">базовый</span>
+      </div>
+
+      {/* Кастомные домены */}
+      <div className="space-y-2 mb-5">
+        {domains.length === 0 && (
+          <div className="text-sm text-neutral-600 text-center py-5 border border-dashed border-neutral-800 rounded-lg">
+            Кастомных доменов пока нет.
+          </div>
+        )}
+        {domains.map(d => (
+          <div
+            key={d}
+            className="flex items-center gap-3 rounded-lg border border-neutral-900 bg-neutral-950/40 px-3 py-2"
+          >
+            <code className="font-mono text-sm text-emerald-300 flex-1 truncate">{d}</code>
+            <a
+              href={`https://${d}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md px-2 py-1 text-xs text-neutral-400 hover:text-neutral-100"
+            >
+              открыть ↗
+            </a>
+            <button
+              onClick={() => remove(d)}
+              disabled={busy}
+              className="rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 disabled:opacity-40"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Добавить */}
+      <form onSubmit={add} className="grid grid-cols-[1fr_auto] gap-2 mb-4">
+        <input
+          required
+          placeholder="example.ru"
+          value={newDomain}
+          onChange={e => setNewDomain(e.target.value)}
+          className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm font-mono"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+        >
+          {busy ? '…' : 'Привязать'}
+        </button>
+      </form>
+
+      {error && (
+        <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      )}
     </Modal>
   )
 }
