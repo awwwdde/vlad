@@ -114,6 +114,35 @@ def start(slug: str) -> None:
     console.print(f"[green]▶[/green] {slug} запущен")
 
 
+@app.command()
+def reconcile() -> None:
+    """Восстановить маршруты Caddy для всех running-проектов.
+
+    Нужно после перезапуска Caddy: его маршруты живут в памяти, статический
+    Caddyfile содержит только apex, поэтому при рестарте гостевые роуты слетают.
+    Команда работает напрямую с БД и Caddy (минуя HTTP-панель)."""
+    from sqlalchemy import select
+
+    import caddy
+    from db import SessionLocal, init_db
+    from models import Project, ProjectStatus
+
+    init_db()
+    restored = 0
+    with SessionLocal() as db:
+        projects = list(
+            db.scalars(select(Project).where(Project.status == ProjectStatus.running))
+        )
+        for p in projects:
+            try:
+                caddy.upsert_route(p.slug, domains=p.custom_domains or [])
+                console.print(f"[green]ok[/green] {p.slug}")
+                restored += 1
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[red]fail[/red] {p.slug}: {e}")
+    console.print(f"восстановлено маршрутов: {restored}/{len(projects)}")
+
+
 @app.command(name="rm")
 def remove(
     slug: str,
