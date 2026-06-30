@@ -59,6 +59,7 @@ def upsert_route(
     slug: str,
     upstream: str | None = None,
     domains: list[str] | None = None,
+    timeout: float = 8.0,
 ) -> None:
     """Создать или обновить маршрут проекта.
 
@@ -70,7 +71,7 @@ def upsert_route(
         upstream = f"{slug}_app:{settings.guest_app_port}"
     route = _build_route(slug, upstream, domains)
 
-    with httpx.Client(timeout=10.0) as client:
+    with httpx.Client(timeout=timeout) as client:
         # Уже есть маршрут с таким @id? — заменяем целиком (PATCH по /id/...).
         existing = client.get(_id_url(slug))
         if existing.status_code == 200:

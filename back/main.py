@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -189,14 +189,25 @@ def get_project(
 
 
 # ── Кастомные домены проекта ─────────────────────────────────────────────────
-# Домен сохраняется в проекте и сразу прописывается в host-матчер Caddy.
-# Caddy выпустит ему TLS-сертификат, как только домен зарезолвится на сервер
-# (A-запись на IP этого хоста). Поддомены *.awwwdde.art — не трогаем.
+# Домен сохраняется в проекте (источник истины) и применяется в Caddy в ФОНЕ —
+# чтобы запрос не висел, если Caddy провозится с выпуском TLS для домена,
+# который ещё не резолвится на сервер. Маршрут также переприменяется при каждом
+# deploy/start, так что в итоге конфиг прокси всегда согласован с БД.
+
+def _apply_caddy_route(slug: str, domains: list[str]) -> None:
+    """Best-effort применение маршрута в Caddy. Ошибки не валят запрос —
+    маршрут переприменится при следующем deploy/start."""
+    try:
+        caddy.upsert_route(slug, domains=domains)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[domains] caddy upsert для {slug} не удался: {exc}")
+
 
 @app.post("/api/projects/{slug}/domains", response_model=ProjectOut)
 def add_domain(
     slug: str,
     payload: DomainIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: object = Depends(auth_mod.require_auth),
 ) -> Project:
@@ -220,17 +231,12 @@ def add_domain(
     current = list(proj.custom_domains or [])
     if domain not in current:
         current.append(domain)
-
-    # Сначала применяем в Caddy, потом сохраняем в БД — так конфиг прокси и БД
-    # остаются согласованными (если Caddy не принял — домен не сохраняем).
-    try:
-        caddy.upsert_route(slug, domains=current)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Caddy: {exc}") from exc
-
     proj.custom_domains = current  # переприсваиваем — иначе SQLAlchemy не заметит мутацию JSONB
     db.commit()
     db.refresh(proj)
+
+    # Применяем в Caddy в фоне — ответ возвращается сразу.
+    background.add_task(_apply_caddy_route, slug, list(proj.custom_domains))
     return proj
 
 
@@ -238,19 +244,18 @@ def add_domain(
 def remove_domain(
     slug: str,
     domain: str,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: object = Depends(auth_mod.require_auth),
 ) -> Project:
     proj = _get_project(db, slug)
     domain = domain.strip().lower().rstrip(".")
     current = [d for d in (proj.custom_domains or []) if d != domain]
-    try:
-        caddy.upsert_route(slug, domains=current)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Caddy: {exc}") from exc
     proj.custom_domains = current
     db.commit()
     db.refresh(proj)
+
+    background.add_task(_apply_caddy_route, slug, list(proj.custom_domains))
     return proj
 
 
