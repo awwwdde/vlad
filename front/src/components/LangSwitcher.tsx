@@ -1,31 +1,44 @@
-import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useCursor } from '@/context/CursorContext'
+'use client'
 
-export function LangSwitcher({ lightMode = false }: { lightMode?: boolean }) {
+import { useTranslation } from 'react-i18next'
+import { LANGS, setLang, type Lang } from '@/i18n'
+import { cn } from '@/lib/cn'
+
+export function LangSwitcher({
+  className,
+  onDark = false,
+}: {
+  className?: string
+  /** Поверх иллюстрации героя: там нужен белый, токены темы неприменимы. */
+  onDark?: boolean
+}) {
   const { i18n } = useTranslation()
-  const { set } = useCursor()
-  const lng = i18n.language
+  const current = (i18n.language?.startsWith('en') ? 'en' : 'ru') as Lang
 
   return (
-    <button
-      onClick={() => i18n.changeLanguage(lng === 'en' ? 'ru' : 'en')}
-      onMouseEnter={() => set('pointer')}
-      onMouseLeave={() => set('default')}
-      className={`font-mono text-[11px] uppercase tracking-widest w-8 h-5 overflow-hidden relative ${lightMode ? 'text-white/50 hover:text-white' : 'text-ink/40 hover:text-ink'} transition-colors`}
-    >
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={lng}
-          className="absolute inset-0 flex items-center justify-center"
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -10, opacity: 0 }}
-          transition={{ duration: 0.2 }}
+    <div className={cn('flex items-center gap-1 font-ui text-[13px] font-medium', className)}>
+      {LANGS.map(lang => (
+        <button
+          key={lang}
+          type="button"
+          onClick={() => setLang(lang)}
+          aria-pressed={lang === current}
+          // Цвет задаётся классом в обоих состояниях, а не инлайном: только так
+          // между белым и тёмным работает transition-colors.
+          className={cn(
+            'rounded-full px-2 py-1 uppercase transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+            onDark
+              ? lang === current
+                ? 'text-white'
+                : 'text-white/60 hover:text-white'
+              : lang === current
+                ? 'text-fg'
+                : 'text-muted hover:text-fg',
+          )}
         >
-          {lng.toUpperCase()}
-        </motion.span>
-      </AnimatePresence>
-    </button>
+          {lang}
+        </button>
+      ))}
+    </div>
   )
 }

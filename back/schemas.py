@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -285,3 +286,74 @@ class SiteSettingOut(BaseModel):
     key: str
     value: str
     updated_at: datetime
+
+
+# ── Метрики нагрузки ─────────────────────────────────────────────────────────
+
+class MetricPoint(BaseModel):
+    """Одна точка графика. Сеть и диск - прирост за интервал, а не счётчик."""
+
+    t: datetime
+    cpu: float
+    cpu_max: float | None = None
+    mem: int
+    mem_limit: int | None = None
+    net_rx: int = 0
+    net_tx: int = 0
+
+
+class MetricSeries(BaseModel):
+    container: str
+    points: list[MetricPoint]
+
+
+class MetricsOut(BaseModel):
+    slug: str
+    range: str
+    #: raw - сырые замеры, hourly - часовые срезы. Фронт по этому полю решает,
+    #: показывать ли полосу пика: у сырых точек пика нет, точка и есть значение.
+    resolution: Literal["raw", "hourly"]
+    #: Шаг сетки в секундах - нужен, чтобы подписать ось и посчитать разрывы.
+    step_seconds: int
+    series: list[MetricSeries]
+
+
+class HealthEventOut(BaseModel):
+    at: datetime
+    state: str
+    restarts: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectHealthOut(BaseModel):
+    slug: str
+    state: str | None = None
+    restarts: int = 0
+    #: Доля времени в состоянии running за период, 0..100. None - данных нет.
+    uptime_percent: float | None = None
+    db_size_bytes: int | None = None
+    events: list[HealthEventOut] = []
+
+
+class ProjectLoadOut(BaseModel):
+    """Строка сводки по проекту: последнее известное потребление."""
+
+    slug: str
+    title: str | None = None
+    status: ProjectStatus
+    cpu_percent: float = 0.0
+    mem_bytes: int = 0
+    state: str | None = None
+    restarts: int = 0
+    #: Причина попадания в «требует внимания». None - проект в порядке.
+    attention: str | None = None
+
+
+class OverviewOut(BaseModel):
+    at: datetime
+    projects_total: int
+    projects_running: int
+    cpu_percent_total: float
+    mem_bytes_total: int
+    projects: list[ProjectLoadOut]

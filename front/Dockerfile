@@ -1,25 +1,42 @@
-# Multi-stage сборка фронта.
-# Финальный stage — пустой alpine, который копирует dist/ в shared volume и засыпает,
-# чтобы Caddy в соседнем контейнере отдавал статику. Это проще, чем держать второй
-# веб-сервер только ради статики.
+# Multi-stage сборка Next.js в standalone-режим.
+# Итоговый образ — Node, который сам обслуживает apex-домен на :3000;
+# Caddy проксирует его (см. deploy/Caddyfile). Прежний вариант «положить dist
+# в общий volume» больше не годится: у сайта есть серверный рендер и ISR.
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+# package.json первым — слой кешируется, пока зависимости не менялись.
+# npm install (а не ci): package-lock.json может содержать только
+# Windows/macOS-варианты платформенных бинарников, npm ci на это падает
+# с EUSAGE, install спокойно дозаписывает Linux-варианты внутри образа.
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# package.json первым — кеш слоёв сохраняется при изменении исходников.
-# Используем npm install (а не npm ci), потому что package-lock.json может
-# содержать только Windows/macOS-варианты optional-пакетов (rollup/lightningcss
-# и пр. имеют per-platform нативные бинарники). npm ci падает с EUSAGE,
-# install — спокойно дозаписывает Linux-варианты в lock внутри образа.
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev=false --no-audit --no-fund
-
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Публичные NEXT_PUBLIC_* инлайнятся на сборке, поэтому пробрасываем их сюда.
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Минималистичный «sidecar», который кладёт build в общий volume и держится живым.
-# Это удобнее, чем init-контейнер: на каждый перезапуск front-сервиса dist обновляется.
-FROM alpine:3.20
-RUN apk add --no-cache rsync
-COPY --from=builder /app/dist /app/dist
-CMD sh -c "rsync -a --delete /app/dist/ /shared/ && tail -f /dev/null"
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# standalone кладёт минимальный server.js и только реально нужные модули.
+# static и public он не копирует — переносим руками.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001 && chown -R nextjs:nodejs /app
+USER nextjs
+
+EXPOSE 3000
+CMD ["node", "server.js"]

@@ -1,8 +1,10 @@
+'use client'
+
 // Публичный POST в /api/contact из обеих форм (S6Contact и A2Contact).
 // Отдельный helper, потому что src/admin/api.ts тащит Bearer-токен из
 // localStorage — публичной форме это не нужно.
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? ''
 
 export interface ContactPayload {
   email: string

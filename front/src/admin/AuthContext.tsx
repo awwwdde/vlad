@@ -1,3 +1,5 @@
+'use client'
+
 import {
   createContext,
   useCallback,
@@ -25,15 +27,16 @@ const PREVIEW_BYPASS_KEY = 'awwwdde_preview_bypass'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  // loading = true пока проверяем сохранённый токен; не редиректим раньше времени.
-  const [loading, setLoading] = useState(true)
+  // loading = true пока проверяем сохранённый токен; не редиректим раньше
+  // времени. Если токена нет, проверять нечего — стартуем сразу с false.
+  // Читать localStorage в инициализаторе безопасно: админка грузится
+  // динамически с ssr:false, серверного рендера у неё нет.
+  const [loading, setLoading] = useState(() => Boolean(tokenStore.get()))
 
   useEffect(() => {
     let cancelled = false
-    if (!tokenStore.get()) {
-      setLoading(false)
-      return
-    }
+    if (!tokenStore.get()) return
+
     api<User>('/api/auth/me')
       .then(u => {
         if (!cancelled) {

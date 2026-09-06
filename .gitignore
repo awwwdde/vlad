@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 node_modules/
-dist/
+.next/
+next-env.d.ts
+*.tsbuildinfo
 workspaces/
 *.db

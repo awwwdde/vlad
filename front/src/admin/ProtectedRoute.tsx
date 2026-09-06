@@ -1,3 +1,5 @@
+'use client'
+
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 
@@ -15,7 +17,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
   if (!user) {
-    return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
   return <>{children}</>
 }

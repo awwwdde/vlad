@@ -2,7 +2,7 @@
 #
 #   • Admin API открыт на 0.0.0.0:2019 — панель добавляет/убирает маршруты
 #     гостей через REST (см. back/caddy.py).
-#   • Apex {$DOMAIN}: отдаём SPA-портфолио + проксируем /api/* в панель.
+#   • Apex {$DOMAIN}: проксируем сайт в Next.js (сервис front) и /api/* в панель.
 #   • Под-сайты <slug>.{$DOMAIN}: маршруты пишет панель на лету, Caddy
 #     автоматически выпускает HTTP-01 сертификат при первом запросе.
 #     Чтобы это работало, *.awwwdde.art должен резолвиться на этот IP
@@ -30,11 +30,10 @@
 		reverse_proxy panel:8000
 	}
 
-	# Статика SPA из общего volume (его наполняет сервис `front` в compose).
+	# Сам сайт — Next.js в сервисе `front`. У него серверный рендер и ISR,
+	# поэтому раздать статикой его нельзя: проксируем целиком.
 	handle {
-		root * /srv/front
-		try_files {path} /index.html
-		file_server
+		reverse_proxy front:3000
 	}
 
 	log {

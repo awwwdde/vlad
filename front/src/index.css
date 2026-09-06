@@ -1,7 +1,48 @@
-@import url('https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Токены ──────────────────────────────────────────────────────────────────
+   Одна тема на весь сайт, переключается по prefers-color-scheme. Цвета живут
+   в CSS-переменных, Tailwind ссылается на них (см. tailwind.config.js) —
+   иначе под каждую тему пришлось бы дублировать классы на каждом блоке.
+
+   Акцент один на весь сайт: ржаво-оранжевый. В светлой теме берём тёмную
+   ступень (контраст к белому 5.1:1, проходит AA для текста), в тёмной —
+   светлую. Это один цвет в двух светлотах, а не два разных акцента. */
+:root {
+  --bg: 250 250 249;
+  --surface: 244 244 242;
+  --fg: 24 24 27;
+  --muted: 113 113 122;
+  --line: 228 228 231;
+  --accent: 47 107 51;
+  --accent-fg: 255 255 255;
+
+  /* Статусы. Отдельная от акцента группа: акцент - это «сюда нажать»,
+     а статус - «вот что происходит», и смешивать их нельзя. Каждый цвет
+     проверен на контраст к фону как текст: 4.9 / 5.7 / 6.3 к единице. */
+  --good: 21 127 61;
+  --warning: 138 90 0;
+  --danger: 179 38 30;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 12 12 13;
+    --surface: 24 24 26;
+    --fg: 250 250 250;
+    --muted: 161 161 170;
+    --line: 39 39 42;
+    --accent: 143 190 68;
+    --accent-fg: 24 24 27;
+
+    /* Свои ступени под тёмный фон, а не осветление светлых: 9.5 / 9.0 / 7.7. */
+    --good: 92 201 138;
+    --warning: 224 166 60;
+    --danger: 242 132 107;
+  }
+}
 
 @layer base {
   *,
@@ -12,115 +53,57 @@
     padding: 0;
   }
 
-  html { 
-    scroll-behavior: auto;
+  html {
     -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
   }
 
   body {
-    font-family: 'Onest', sans-serif;
-    background: #FFFFFF;
-    color: #0D0D0D;
-    cursor: none;
-  }
-
-  /* В админке кастомный курсор не нужен — возвращаем нормальный для удобства. */
-  body.admin,
-  body.admin * {
-    cursor: auto;
-  }
-  body.admin a,
-  body.admin button,
-  body.admin [role="button"],
-  body.admin label {
-    cursor: pointer;
-  }
-  body.admin input,
-  body.admin textarea {
-    cursor: text;
-  }
-
-  body.home-page {
-    overflow: hidden;
-    overscroll-behavior: none;
-    touch-action: none;
-    height: 100dvh;
+    background: rgb(var(--bg));
+    color: rgb(var(--fg));
   }
 
   ::selection {
-    background: #C4B5FD;
-    color: #0D0D0D;
+    background: rgb(var(--accent));
+    color: rgb(var(--accent-fg));
   }
 
-  ::-webkit-scrollbar {
-    width: 0;
+  /* Видимый фокус обязателен: по сайту можно ходить с клавиатуры. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 }
 
-.split-line {
-  overflow: hidden !important;
-  display: block !important;
-  /* Reserve extra glyph space so bold ascenders/descenders are not clipped */
-  padding-top: 0.12em;
-  padding-bottom: 0.12em;
-  margin-top: -0.12em;
-  margin-bottom: -0.12em;
-}
+/* Админка раньше держала свою тёмную палитру и форсировала фон. Теперь она
+   набрана теми же токенами, что и сайт, и следует системной теме вместе с ним,
+   поэтому отдельное правило больше не нужно. */
 
-.word-init {
-  display: inline-block;
-  transform: translateY(115%);
-  opacity: 0;
-  will-change: transform, opacity;
-}
+/* ── Процедурный блюр под шапкой ─────────────────────────────────────────────
+   Сами слои размытия заданы инлайном в SiteHeader: backdrop-filter из этого
+   файла до браузера не доезжает - CSS-конвейер сборки вырезает свойство,
+   в отданной странице от правил остаются одни маски. Инлайн-стиль идёт мимо
+   конвейера и потому надёжнее.
 
-.easter-blue-glitch {
-  background:
-    linear-gradient(0deg, rgba(85, 204, 255, 0.82), rgba(85, 204, 255, 0.82)),
-    linear-gradient(
-      90deg,
-      transparent 0 50px,
-      rgba(0, 140, 255, 0.45) 50px 100px,
-      transparent 100px 150px,
-      rgba(0, 180, 255, 0.5) 150px 200px
-    ),
-    linear-gradient(
-      0deg,
-      transparent 0 50px,
-      rgba(0, 120, 255, 0.35) 50px 100px,
-      transparent 100px 150px,
-      rgba(0, 200, 255, 0.4) 150px 200px
-    );
-  background-size: 100% 100%, 200px 100%, 100% 200px;
-  background-position: 0 0, 0 0, 0 0;
-  mix-blend-mode: normal;
-  animation: easterPixelBlocks 0.28s steps(2, end) infinite;
-}
-
-@keyframes easterPixelBlocks {
-  0% {
-    opacity: 0.82;
-    background-position: 0 0, 0 0, 0 0;
-    filter: saturate(1.1);
+   Здесь остаётся только запасной вариант: кому размытие противопоказано,
+   отдаём плотную подложку, иначе текст шапки ляжет прямо на контент. */
+@media (prefers-reduced-transparency: reduce) {
+  .progressive-blur > span {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
   }
-  25% {
-    opacity: 0.94;
-    background-position: 0 0, 50px 0, 0 50px;
-    filter: saturate(1.3);
+  .progressive-blur > span:first-child {
+    background: rgb(var(--bg));
   }
-  50% {
-    opacity: 0.88;
-    background-position: 0 0, 100px 0, 0 100px;
-    filter: saturate(1.15);
-  }
-  75% {
-    opacity: 0.96;
-    background-position: 0 0, 150px 0, 0 150px;
-    filter: saturate(1.35);
-  }
-  100% {
-    opacity: 0.84;
-    background-position: 0 0, 200px 0, 0 200px;
-    filter: saturate(1.1);
+  .progressive-blur > span:nth-child(n + 2) {
+    display: none;
   }
 }

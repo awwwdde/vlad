@@ -1,0 +1,15 @@
+# Локальный стек для разработки: только панель и её БД.
+#
+# Caddy и сборка фронта здесь не нужны — фронт крутится dev-сервером Next на
+# :3000 и сам проксирует /api и /healthz в панель (см. front/next.config.ts).
+# Поэтому порт панели публикуем наружу, в проде он остаётся внутренним.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build panel panel_db
+services:
+  panel:
+    ports:
+      # 8000 на хосте занят другим проектом, поэтому 8010.
+      # Внутрь контейнера панель как слушала 8000, так и слушает.
+      - "8010:8000"
+    environment:
+      BASE_DOMAIN: localhost

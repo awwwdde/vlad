@@ -92,3 +92,71 @@ export interface EnvVarReveal {
   value: string
 }
 
+
+// ── Нагрузка гостевых стендов ────────────────────────────────────────────────
+// Зеркало схем back/schemas.py: MetricsOut, ProjectHealthOut, OverviewOut.
+
+export type MetricRange = '1h' | '24h' | '7d' | '30d'
+
+export interface MetricPoint {
+  t: string
+  cpu: number
+  /** Пик за корзину. Есть только у часовых срезов: у сырых замеров точка и
+   *  есть значение, пику взяться неоткуда. */
+  cpu_max: number | null
+  mem: number
+  mem_limit: number | null
+  /** Прирост за интервал, а не показание счётчика. */
+  net_rx: number
+  net_tx: number
+}
+
+export interface MetricSeries {
+  /** 'app' или 'db'. */
+  container: string
+  points: MetricPoint[]
+}
+
+export interface Metrics {
+  slug: string
+  range: MetricRange
+  resolution: 'raw' | 'hourly'
+  step_seconds: number
+  series: MetricSeries[]
+}
+
+export interface HealthEvent {
+  at: string
+  state: string
+  restarts: number
+}
+
+export interface ProjectHealth {
+  slug: string
+  state: string | null
+  restarts: number
+  uptime_percent: number | null
+  db_size_bytes: number | null
+  events: HealthEvent[]
+}
+
+export interface ProjectLoad {
+  slug: string
+  title: string | null
+  status: ProjectStatus
+  cpu_percent: number
+  mem_bytes: number
+  state: string | null
+  restarts: number
+  /** Причина попадания в «требует внимания»; null — стенд в порядке. */
+  attention: string | null
+}
+
+export interface MetricsOverview {
+  at: string
+  projects_total: number
+  projects_running: number
+  cpu_percent_total: number
+  mem_bytes_total: number
+  projects: ProjectLoad[]
+}

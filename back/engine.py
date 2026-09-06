@@ -27,6 +27,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from dataclasses import dataclass
+
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 
@@ -300,3 +302,112 @@ def app_logs(slug: str, tail: int = 200) -> str:
         )
     except NotFound:
         return f"(контейнер {app_container} не найден)"
+
+
+# ── Съём нагрузки ────────────────────────────────────────────────────────────
+
+@dataclass(slots=True)
+class ContainerStats:
+    """Мгновенный срез нагрузки одного контейнера."""
+
+    state: str
+    restarts: int
+    cpu_percent: float
+    mem_bytes: int
+    mem_limit_bytes: int
+    net_rx_bytes: int
+    net_tx_bytes: int
+    blk_read_bytes: int
+    blk_write_bytes: int
+
+
+def container_stats(name: str) -> ContainerStats | None:
+    """Снять нагрузку контейнера. None - если контейнера нет.
+
+    stream=False снимает ровно один срез. Докер в этом режиме отдаёт и
+    предыдущий замер (precpu_stats), поэтому процент CPU считается по разнице
+    прямо здесь и второй запрос не нужен.
+    """
+    try:
+        c = client().containers.get(name)
+    except NotFound:
+        return None
+    except APIError as exc:
+        raise DeployError(f"docker недоступен: {exc}") from exc
+
+    state = (c.attrs.get("State") or {})
+    restarts = int(state.get("RestartCount") or c.attrs.get("RestartCount") or 0)
+    status = str(state.get("Status") or c.status or "unknown")
+
+    if status != "running":
+        # У остановленного контейнера статистики нет, но факт остановки важен.
+        return ContainerStats(status, restarts, 0.0, 0, 0, 0, 0, 0, 0)
+
+    raw = c.stats(stream=False)
+    return ContainerStats(
+        state=status,
+        restarts=restarts,
+        cpu_percent=_cpu_percent(raw),
+        mem_bytes=int((raw.get("memory_stats") or {}).get("usage") or 0),
+        mem_limit_bytes=int((raw.get("memory_stats") or {}).get("limit") or 0),
+        **_io_totals(raw),
+    )
+
+
+def _cpu_percent(raw: dict) -> float:
+    """Процент CPU по разнице с предыдущим замером, как это делает `docker stats`."""
+    cpu = raw.get("cpu_stats") or {}
+    pre = raw.get("precpu_stats") or {}
+    cpu_delta = (cpu.get("cpu_usage") or {}).get("total_usage", 0) - (
+        pre.get("cpu_usage") or {}
+    ).get("total_usage", 0)
+    sys_delta = cpu.get("system_cpu_usage", 0) - pre.get("system_cpu_usage", 0)
+    if cpu_delta <= 0 or sys_delta <= 0:
+        return 0.0
+    # online_cpus отсутствует на старых демонах - тогда считаем по длине массива.
+    cpus = cpu.get("online_cpus") or len((cpu.get("cpu_usage") or {}).get("percpu_usage") or [1])
+    return round(cpu_delta / sys_delta * cpus * 100.0, 2)
+
+
+def _io_totals(raw: dict) -> dict[str, int]:
+    """Суммарные счётчики сети и диска. Значения кумулятивные с момента старта."""
+    rx = tx = 0
+    for iface in (raw.get("networks") or {}).values():
+        rx += int(iface.get("rx_bytes") or 0)
+        tx += int(iface.get("tx_bytes") or 0)
+
+    read = write = 0
+    for entry in ((raw.get("blkio_stats") or {}).get("io_service_bytes_recursive") or []):
+        op = str(entry.get("op", "")).lower()
+        if op == "read":
+            read += int(entry.get("value") or 0)
+        elif op == "write":
+            write += int(entry.get("value") or 0)
+
+    return {
+        "net_rx_bytes": rx,
+        "net_tx_bytes": tx,
+        "blk_read_bytes": read,
+        "blk_write_bytes": write,
+    }
+
+
+def db_size_bytes(slug: str) -> int | None:
+    """Размер гостевой БД. None - если контейнер недоступен или запрос не прошёл."""
+    _, db_container, _, _ = _names(slug)
+    try:
+        c = client().containers.get(db_container)
+    except (NotFound, APIError):
+        return None
+    if c.status != "running":
+        return None
+    code, out = c.exec_run(
+        ["psql", "-U", slug, "-d", slug, "-tAc", f"SELECT pg_database_size('{slug}')"],
+        demux=False,
+    )
+    if code != 0:
+        return None
+    try:
+        return int(out.decode().strip())
+    except (ValueError, AttributeError):
+        return None

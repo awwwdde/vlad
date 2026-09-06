@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 
 // Публичный snapshot всех site-settings, доступный без авторизации.
@@ -7,7 +9,7 @@ import { useEffect, useState } from 'react'
 
 export type SiteSettings = Record<string, string>
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? ''
 
 // Кэш на уровне модуля — один запрос на сессию SPA.
 let cache: SiteSettings | null = null

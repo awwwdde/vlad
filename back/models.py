@@ -5,8 +5,10 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
+    Float,
     Enum,
     ForeignKey,
     Integer,
@@ -100,6 +102,16 @@ class Project(Base):
     # Прокидываются в app-контейнер при деплое поверх дефолтов
     # (DATABASE_URL/SECRET_KEY и пр.). Удобно для BOOTSTRAP_ADMIN_*,
     # TG_BOT_TOKEN и любых других ключей конкретного гостя.
+    metric_samples: Mapped[list["MetricSample"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
+    metric_hourly: Mapped[list["MetricHourly"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
+    health_events: Mapped[list["HealthEvent"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
+
     env_vars: Mapped[list["ProjectEnvVar"]] = relationship(
         "ProjectEnvVar",
         cascade="all, delete-orphan",
@@ -237,3 +249,94 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# ── Метрики нагрузки гостевых контейнеров ────────────────────────────────────
+# Хранение двухуровневое: сырые точки живут двое суток и нужны, чтобы увидеть
+# минуту, в которую стенд лёг; дальше они сворачиваются в часовые срезы на
+# месяц. Третий уровень (суточный) не заводим намеренно: под-сайты это
+# тестовые стенды, история глубже месяца по ним никому не нужна, а лишняя
+# агрегация - лишний код и лишние гарантии, которые придётся держать.
+
+class MetricSample(Base):
+    """Один замер нагрузки контейнера. Пишется сборщиком раз в 15 секунд."""
+
+    __tablename__ = "metric_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    #: "app" или "db" - у проекта два контейнера, и нагрузка у них разная.
+    container: Mapped[str] = mapped_column(String(16))
+
+    taken_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+    cpu_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    mem_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    mem_limit_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    #: Счётчики докера кумулятивные, поэтому храним их как есть, а разницу
+    #: считаем на выдаче: иначе рестарт контейнера дал бы отрицательную скорость.
+    net_rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    net_tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    blk_read_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    blk_write_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    project: Mapped["Project"] = relationship(back_populates="metric_samples")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<MetricSample {self.project_id}/{self.container} {self.taken_at}>"
+
+
+class MetricHourly(Base):
+    """Часовой срез: среднее и пик за час по контейнеру."""
+
+    __tablename__ = "metric_hourly"
+    __table_args__ = (
+        UniqueConstraint("project_id", "container", "hour", name="uq_metric_hour"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    container: Mapped[str] = mapped_column(String(16))
+    #: Начало часа в UTC.
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    samples: Mapped[int] = mapped_column(Integer, default=0)
+    cpu_avg: Mapped[float] = mapped_column(Float, default=0.0)
+    cpu_max: Mapped[float] = mapped_column(Float, default=0.0)
+    mem_avg: Mapped[int] = mapped_column(BigInteger, default=0)
+    mem_max: Mapped[int] = mapped_column(BigInteger, default=0)
+    net_rx_delta: Mapped[int] = mapped_column(BigInteger, default=0)
+    net_tx_delta: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    project: Mapped["Project"] = relationship(back_populates="metric_hourly")
+
+
+class HealthEvent(Base):
+    """Смена состояния контейнера: упал, поднялся, рестартнул.
+
+    Отдельно от замеров, потому что отвечает на другой вопрос. Замеры говорят
+    «сколько ест», события - «сколько раз падал»; по графику нагрузки
+    циклический перезапуск не виден, а по счётчику рестартов виден сразу.
+    """
+
+    __tablename__ = "health_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    #: docker-статус контейнера: running / exited / restarting / missing.
+    state: Mapped[str] = mapped_column(String(24))
+    #: Счётчик рестартов, как его отдаёт docker inspect.
+    restarts: Mapped[int] = mapped_column(Integer, default=0)
+
+    project: Mapped["Project"] = relationship(back_populates="health_events")

@@ -1,3 +1,5 @@
+'use client'
+
 // Тонкая обёртка над fetch для админских вызовов.
 // Токен лежит в localStorage (MVP). Для прод-усиления — переехать на httpOnly cookie
 // + CSRF-токен; сейчас в обмен на простоту мы держим SPA-логику.
@@ -5,8 +7,8 @@
 const TOKEN_KEY = 'awwwdde_jwt'
 
 // В dev фронт ходит в http://localhost:8000, в проде — same-origin (Caddy
-// проксирует /api/* на panel). VITE_API_BASE можно переопределить в .env.
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+// проксирует /api/* на panel). NEXT_PUBLIC_API_BASE можно переопределить в .env.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? ''
 
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),

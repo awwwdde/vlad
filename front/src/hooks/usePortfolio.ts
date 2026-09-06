@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { I18nBundle, PortfolioItem } from '@/admin/types'
@@ -33,7 +35,7 @@ if (channel) {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? ''
 
 async function fetchPortfolio(): Promise<PortfolioItem[]> {
   if (inflight) return inflight
@@ -62,10 +64,17 @@ export function invalidatePortfolio(): void {
 }
 
 /** Список карточек портфолио. Возвращает кэш/fallback мгновенно, в фоне
- *  всегда фетчит свежее. */
-export function usePortfolio(): PortfolioItem[] {
+ *  всегда фетчит свежее.
+ *
+ *  `initial` — данные, отрендеренные на сервере (см. lib/portfolio-server).
+ *  Они нужны, чтобы SSR и первый клиентский рендер совпали: без них сервер
+ *  отдал бы живые данные, а гидратация подставила FALLBACK, и React ругнулся
+ *  бы на несовпадение. Модульный `cache` при SSR всегда пуст — он наполняется
+ *  только в useEffect, то есть на клиенте, так что данные между запросами
+ *  не текут. */
+export function usePortfolio(initial?: PortfolioItem[]): PortfolioItem[] {
   const [items, setItems] = useState<PortfolioItem[]>(
-    () => cache ?? FALLBACK_PORTFOLIO,
+    () => cache ?? initial ?? FALLBACK_PORTFOLIO,
   )
   useEffect(() => {
     subscribers.add(setItems)
@@ -81,8 +90,11 @@ export function usePortfolio(): PortfolioItem[] {
 }
 
 /** Один проект по slug. null если slug отсутствует. */
-export function usePortfolioItem(slug: string | undefined): PortfolioItem | null {
-  const items = usePortfolio()
+export function usePortfolioItem(
+  slug: string | undefined,
+  initial?: PortfolioItem[],
+): PortfolioItem | null {
+  const items = usePortfolio(initial)
   if (!slug) return null
   return items.find(i => i.slug === slug) ?? null
 }
