@@ -18,3 +18,7 @@ bcrypt==5.0.0
 PyJWT==2.10.1
 # Шифрование env-переменных гостей (ProjectEnvVar.value_encrypted).
 cryptography==44.0.0
+# Приём файлов формой (multipart) — загрузка картинок портфолио.
+python-multipart==0.0.20
+# Проверка, уменьшение и очистка EXIF у загруженных изображений.
+Pillow==11.1.0

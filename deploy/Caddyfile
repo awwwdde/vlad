@@ -24,9 +24,10 @@
 		-Server
 	}
 
-	# API панели — всё под /api/* идёт в FastAPI.
-	@api path /api/* /healthz
-	handle @api {
+	# Панель: API и загруженные картинки портфолио. Картинки лежат в томе
+	# у панели, а не в образе фронта, поэтому отдаёт их тоже она.
+	@panel path /api/* /healthz /uploads/*
+	handle @panel {
 		reverse_proxy panel:8000
 	}
 

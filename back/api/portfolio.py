@@ -4,14 +4,18 @@ from __future__ import annotations
 from fastapi import APIRouter
 from db import get_db
 from fastapi import Depends
+from fastapi import File
 from fastapi import HTTPException
+from fastapi import UploadFile
 from models import PortfolioItem
+from schemas import ImageOrderIn
 from schemas import PortfolioItemIn
 from schemas import PortfolioItemOut
 from schemas import ReorderRequest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import auth as auth_mod
+import uploads
 
 router = APIRouter(tags=["портфолио"])
 
@@ -116,3 +120,113 @@ def portfolio_reorder(
             )
         )
     )
+
+
+# ── Галерея карточки ─────────────────────────────────────────────────────────
+# Картинки живут отдельно от формы с текстами. Иначе сохранение подписи после
+# загрузки фотографий затирало бы список: форма отправляет всё поле целиком,
+# а про новые файлы она не знает.
+
+@router.post(
+    "/api/content/portfolio/{slug}/images",
+    response_model=PortfolioItemOut,
+    summary="Загрузить картинки в галерею",
+)
+async def portfolio_images_upload(
+    slug: str,
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> PortfolioItem:
+    item = db.scalar(select(PortfolioItem).where(PortfolioItem.slug == slug))
+    if not item:
+        raise HTTPException(status_code=404, detail="не найден")
+
+    current = list(item.images or [])
+    free = uploads.MAX_IMAGES_PER_ITEM - len(current)
+    if free <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"уже {uploads.MAX_IMAGES_PER_ITEM} картинок — удалите лишние",
+        )
+    if len(files) > free:
+        raise HTTPException(
+            status_code=409,
+            detail=f"осталось мест: {free}, а прислано файлов: {len(files)}",
+        )
+
+    saved: list[str] = []
+    try:
+        for f in files:
+            raw = await f.read()
+            saved.append(uploads.save_image(raw, slug))
+    except uploads.UploadError as exc:
+        # Частично принятую пачку откатываем: иначе в галерее осядут файлы
+        # из загрузки, которую пользователь считает неудавшейся.
+        for name in saved:
+            uploads.delete_image(name)
+        raise HTTPException(status_code=400, detail=f"{f.filename}: {exc}") from exc
+
+    item.images = current + saved
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.delete(
+    "/api/content/portfolio/{slug}/images/{index}",
+    response_model=PortfolioItemOut,
+    summary="Удалить картинку из галереи",
+)
+def portfolio_image_delete(
+    slug: str,
+    index: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> PortfolioItem:
+    item = db.scalar(select(PortfolioItem).where(PortfolioItem.slug == slug))
+    if not item:
+        raise HTTPException(status_code=404, detail="не найден")
+
+    current = list(item.images or [])
+    if not 0 <= index < len(current):
+        raise HTTPException(status_code=404, detail="картинки с таким номером нет")
+
+    name = current.pop(index)
+    item.images = current
+    db.commit()
+    # Файл удаляем после коммита: если база откатится, лучше осиротевший файл,
+    # чем запись, ссылающаяся в пустоту.
+    uploads.delete_image(name)
+    db.refresh(item)
+    return item
+
+
+@router.put(
+    "/api/content/portfolio/{slug}/images",
+    response_model=PortfolioItemOut,
+    summary="Изменить порядок картинок",
+)
+def portfolio_images_reorder(
+    slug: str,
+    payload: ImageOrderIn,
+    db: Session = Depends(get_db),
+    _: object = Depends(auth_mod.require_auth),
+) -> PortfolioItem:
+    """Порядок задаётся номерами текущих позиций. Первая картинка становится
+    обложкой карточки на главной, поэтому перестановка - осмысленное действие,
+    а не украшение."""
+    item = db.scalar(select(PortfolioItem).where(PortfolioItem.slug == slug))
+    if not item:
+        raise HTTPException(status_code=404, detail="не найден")
+
+    current = list(item.images or [])
+    if sorted(payload.order) != list(range(len(current))):
+        raise HTTPException(
+            status_code=400,
+            detail="порядок должен содержать каждый номер ровно один раз",
+        )
+    item.images = [current[i] for i in payload.order]
+    db.commit()
+    db.refresh(item)
+    return item

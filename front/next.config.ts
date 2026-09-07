@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
     return [
       { source: '/api/:path*', destination: `${PANEL_ORIGIN}/api/:path*` },
       { source: '/healthz', destination: `${PANEL_ORIGIN}/healthz` },
+      // Картинки портфолио отдаёт панель из своего тома.
+      { source: '/uploads/:path*', destination: `${PANEL_ORIGIN}/uploads/:path*` },
     ]
   },
 }

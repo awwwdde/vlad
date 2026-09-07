@@ -122,6 +122,8 @@ class I18nBundle(BaseModel):
 class PortfolioItemIn(BaseModel):
     slug: str
     link: str | None = None
+    # Галерея не редактируется этой формой: файлы загружаются и удаляются
+    # отдельными эндпоинтами, иначе сохранение текстов затирало бы картинки.
     image_url: str | None = None
     accent: str | None = None
     ru: I18nBundle = I18nBundle()
@@ -143,7 +145,29 @@ class PortfolioItemOut(BaseModel):
     slug: str
     order_index: int
     link: str | None
+    #: Готовые URL картинок галереи, по порядку показа.
+    images: list[str] = []
     image_url: str | None
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def _image_urls(cls, v: object) -> list[str]:
+        """В БД лежат имена файлов, наружу отдаём URL.
+
+        Хранить в базе готовый URL заманчиво, но тогда смена схемы раздачи
+        (другой префикс, CDN) означала бы обновление каждой строки. Имя файла
+        от способа раздачи не зависит.
+
+        Значения, которые уже выглядят как ссылка, пропускаем как есть -
+        так поле переживёт ручную правку и внешние картинки."""
+        if not isinstance(v, list):
+            return []
+        out: list[str] = []
+        for name in v:
+            if not isinstance(name, str) or not name:
+                continue
+            out.append(name if name.startswith(("/", "http://", "https://")) else f"/uploads/{name}")
+        return out
     accent: str | None
     ru: I18nBundle
     en: I18nBundle
@@ -357,3 +381,9 @@ class OverviewOut(BaseModel):
     cpu_percent_total: float
     mem_bytes_total: int
     projects: list[ProjectLoadOut]
+
+
+class ImageOrderIn(BaseModel):
+    """Новый порядок картинок галереи: номера текущих позиций."""
+
+    order: list[int]

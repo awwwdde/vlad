@@ -48,6 +48,7 @@ services:
       DOCKER_NETWORK: awwwdde_net
       GUEST_APP_PORT: "8080"
       WORKSPACES_DIR: /workspaces
+      UPLOADS_DIR: /app/uploads
       API_TOKEN: ${API_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
       ENV_ENCRYPTION_KEY: ${ENV_ENCRYPTION_KEY}
@@ -59,6 +60,8 @@ services:
       # Бандлы локалей фронта — нужны для первичного сидинга переводов
       # (см. back/seed_translations.py → _CANDIDATES). Read-only.
       - ./front/src/locales:/app/locales:ro
+      # Картинки портфолио. Отдельный том: они переживают пересборку образа.
+      - panel_uploads:/app/uploads
     depends_on:
       panel_db:
         condition: service_healthy
@@ -106,6 +109,7 @@ volumes:
   caddy_config:
   panel_db_data:
   panel_workspaces:
+  panel_uploads:
 
 networks:
   awwwdde_net:

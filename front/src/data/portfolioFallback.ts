@@ -13,7 +13,7 @@ const NOW = new Date().toISOString()
 export const FALLBACK_PORTFOLIO: PortfolioItem[] = [
   {
     id: 1, slug: 'pickupservice', order_index: 0,
-    link: 'https://pickupservice.moscow/', image_url: '/images/pickupservice.jpg', accent: '#1a1a1a',
+    link: 'https://pickupservice.moscow/', image_url: '/images/pickupservice.jpg', images: [], accent: '#1a1a1a',
     ru: {
       title: 'Pickup Service',
       tagline: 'Здесь начинается серьёзный внедорожник.',
@@ -30,7 +30,7 @@ export const FALLBACK_PORTFOLIO: PortfolioItem[] = [
   },
   {
     id: 2, slug: 'kitluna', order_index: 1,
-    link: null, image_url: '/images/kitluna.jpg', accent: '#C4B5FD',
+    link: null, image_url: '/images/kitluna.jpg', images: [], accent: '#C4B5FD',
     ru: {
       title: 'KitLuna',
       tagline: 'Студия, которая строит студии.',
@@ -47,7 +47,7 @@ export const FALLBACK_PORTFOLIO: PortfolioItem[] = [
   },
   {
     id: 3, slug: 'linkavto', order_index: 2,
-    link: 'https://linkavto.ru/', image_url: '/images/linkavto.jpg', accent: '#2563EB',
+    link: 'https://linkavto.ru/', image_url: '/images/linkavto.jpg', images: [], accent: '#2563EB',
     ru: {
       title: 'LinkAvto',
       tagline: 'Любая запчасть. Любой автомобиль.',
@@ -64,7 +64,7 @@ export const FALLBACK_PORTFOLIO: PortfolioItem[] = [
   },
   {
     id: 4, slug: 'awwwdde', order_index: 3,
-    link: null, image_url: '/images/awwwdde.jpg', accent: '#C4B5FD',
+    link: null, image_url: '/images/awwwdde.jpg', images: [], accent: '#C4B5FD',
     ru: {
       title: 'Этот сайт',
       tagline: 'Сапожник с сапогами.',
@@ -81,7 +81,7 @@ export const FALLBACK_PORTFOLIO: PortfolioItem[] = [
   },
   {
     id: 5, slug: 'abrikosova', order_index: 4,
-    link: 'https://www.abrikosova-elena.ru/', image_url: '/images/abrikosova.jpg', accent: '#FCA5A5',
+    link: 'https://www.abrikosova-elena.ru/', image_url: '/images/abrikosova.jpg', images: [], accent: '#FCA5A5',
     ru: {
       title: 'Елена Абрикосова',
       tagline: 'Сладкое заслуживает красивых страниц.',

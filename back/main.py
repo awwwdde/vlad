@@ -16,8 +16,10 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import metrics_collector
+import uploads
 from api import ROUTERS
 from bootstrap import bootstrap
 from config import settings
@@ -79,3 +81,11 @@ app.add_middleware(
 
 for router in ROUTERS:
     app.include_router(router)
+
+# Загруженные картинки портфолио. Раздаются без авторизации: их показывает
+# публичный сайт. Монтируется после роутеров, чтобы префикс /uploads не
+# перехватывал ничего из /api.
+#
+# StaticFiles сам отдаёт ETag и Last-Modified, поэтому повторные заходы
+# получают 304, а не файл целиком.
+app.mount("/uploads", StaticFiles(directory=uploads.uploads_dir()), name="uploads")

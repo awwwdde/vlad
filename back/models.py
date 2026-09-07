@@ -162,6 +162,13 @@ class PortfolioItem(Base):
 
     # Общие колонки (одинаковые на всех языках).
     link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Галерея: имена файлов в каталоге загрузок, по порядку показа.
+    # Первая - обложка карточки на главной, остальные видны только в карусели
+    # на странице проекта. Массив, а не отдельная таблица: их максимум пять,
+    # порядок важен, и join ради пяти строк не окупается.
+    images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    # Старое поле на одну картинку. Оставлено ради карточек, заведённых до
+    # появления галереи: фронт берёт images[0], а при пустом списке - его.
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     accent: Mapped[str | None] = mapped_column(String(20), nullable=True)  # hex
 

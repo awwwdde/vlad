@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api, ApiError } from '@/admin/api'
 import type { PortfolioItem, PortfolioItemPayload, I18nBundle } from '@/admin/types'
 import { invalidatePortfolio } from '@/hooks/usePortfolio'
+import { GalleryEditor } from './GalleryEditor'
 
 const EMPTY_BUNDLE: I18nBundle = { title: '', tagline: '', desc: '', tags: [] }
 
@@ -196,6 +197,9 @@ function Editor(props: {
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Галерея живёт своим состоянием: её эндпоинты отвечают обновлённой
+  // карточкой, и ждать общего сохранения формы незачем.
+  const [gallery, setGallery] = useState<string[]>(item?.images ?? [])
 
   function patch(p: Partial<PortfolioItemPayload>) {
     setForm(f => ({ ...f, ...p }))
@@ -258,14 +262,24 @@ function Editor(props: {
             placeholder="https://…"
             className="col-span-2"
           />
-          <TextField
-            label="image_url"
-            value={form.image_url ?? ''}
-            onChange={v => patch({ image_url: v })}
-            placeholder="/images/foo.jpg"
-            className="col-span-2"
-          />
         </div>
+
+        {/* Галерея доступна только у сохранённой карточки: файлы кладутся
+            по слагу, а у новой его ещё нет в базе. */}
+        {item ? (
+          <GalleryEditor
+            slug={item.slug}
+            images={gallery}
+            onChange={updated => {
+              setGallery(updated.images)
+              props.onSaved()
+            }}
+          />
+        ) : (
+          <p className="font-ui text-[12px] text-muted">
+            Картинки можно будет загрузить сразу после создания карточки.
+          </p>
+        )}
 
         {/* Двуязычные бандлы */}
         <div className="grid grid-cols-2 gap-4">

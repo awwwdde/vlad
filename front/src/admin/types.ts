@@ -54,6 +54,8 @@ export interface PortfolioItem {
   slug: string
   order_index: number
   link: string | null
+  /** Галерея, по порядку показа. Первая — обложка карточки на главной. */
+  images: string[]
   image_url: string | null
   accent: string | null
   ru: I18nBundle
@@ -63,9 +65,11 @@ export interface PortfolioItem {
 }
 
 // Поля, которые отправляются на бек в POST/PUT.
+// images в форму не входит: галерея живёт отдельными эндпоинтами, иначе
+// сохранение текстов затирало бы загруженные картинки.
 export type PortfolioItemPayload = Omit<
   PortfolioItem,
-  'id' | 'order_index' | 'created_at' | 'updated_at'
+  'id' | 'order_index' | 'created_at' | 'updated_at' | 'images'
 >
 
 export interface ContactMessage {

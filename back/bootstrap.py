@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 import caddy
 from db import SessionLocal, init_db
@@ -60,9 +60,31 @@ def reconcile_caddy_routes() -> None:
         print(f"[reconcile] пропущен из-за ошибки: {exc}")
 
 
+#: Колонки, добавленные после того, как таблицы уже жили в проде.
+#:
+#: create_all() умеет создавать таблицы, но не менять существующие: новая
+#: колонка в модели для него не событие, и запрос падает на UndefinedColumn.
+#: Альтернатива - завести Alembic ради одной колонки; для проекта такого
+#: размера это дороже, чем список ниже. Каждая команда идемпотентна,
+#: выполняется на каждом старте и ничего не делает, если колонка уже есть.
+_ADD_COLUMNS = [
+    "ALTER TABLE portfolio_items "
+    "ADD COLUMN IF NOT EXISTS images JSONB NOT NULL DEFAULT '[]'::jsonb",
+]
+
+
+def ensure_columns() -> None:
+    from db import engine as db_engine
+
+    with db_engine.begin() as conn:
+        for sql in _ADD_COLUMNS:
+            conn.execute(text(sql))
+
+
 def bootstrap() -> None:
     """Полный набор стартовых действий в правильном порядке."""
     init_db()
+    ensure_columns()
     seed_portfolio_if_empty()
     seed_translations_if_empty()
     seed_site_defaults()

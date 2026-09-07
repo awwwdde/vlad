@@ -1,14 +1,28 @@
 import type { PortfolioItem } from '@/admin/types'
 
-/** Превью проекта.
+/**
+ * Картинки проекта, по порядку показа.
  *
- *  В БД у части карточек лежат пути вида `/images/<slug>.jpg`, а самих файлов
- *  в public/ нет. Пока реальные скриншоты не загружены, отдаём осмысленный
- *  плейсхолдер с сидом по слагу: у каждого проекта своя стабильная картинка,
- *  и она не прыгает между рендерами. Как только в image_url появится
- *  http-ссылка (или файл реально ляжет в public/images), вернётся она. */
+ * Источников три, и порядок между ними не случайный: загруженная галерея,
+ * затем старое одиночное поле (карточки, заведённые до галереи), и только
+ * потом плейсхолдер. Плейсхолдер с сидом по слагу, а не случайный: иначе
+ * картинка прыгала бы между рендерами и на каждой перезагрузке страницы.
+ */
+export function projectImages(item: PortfolioItem): string[] {
+  const gallery = (item.images ?? []).filter(Boolean)
+  if (gallery.length) return gallery
+
+  const legacy = item.image_url?.trim()
+  if (legacy && /^https?:\/\//.test(legacy)) return [legacy]
+
+  return []
+}
+
+/** Одна картинка для карточки. Плейсхолдер, если своих нет. */
 export function projectImage(item: PortfolioItem, w: number, h: number): string {
-  const url = item.image_url?.trim()
-  if (url && /^https?:\/\//.test(url)) return url
-  return `https://picsum.photos/seed/awwwdde-${item.slug}/${w}/${h}`
+  return projectImages(item)[0] ?? placeholder(item.slug, w, h)
+}
+
+export function placeholder(slug: string, w: number, h: number): string {
+  return `https://picsum.photos/seed/awwwdde-${slug}/${w}/${h}`
 }

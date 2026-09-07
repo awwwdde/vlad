@@ -51,7 +51,9 @@
     "live": "Live site",
     "visit": "Open",
     "next": "Next project",
-    "no_image": "Preview coming later"
+    "no_image": "Preview coming later",
+    "position": "Project {{n}} of {{total}}",
+    "prev": "Previous project"
   },
   "about": {
     "title": "Vlad",
