@@ -55,3 +55,12 @@
 <p align="center">
   <sub>Сделано в Москве</sub>
 </p>
+
+
+cd /opt/awwwdde
+git pull
+docker compose up -d --build
+
+docker compose ps
+docker compose logs panel --tail 20
+curl -s https://awwwdde.art/healthz
