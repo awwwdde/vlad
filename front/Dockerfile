@@ -19,6 +19,13 @@ COPY . .
 # Публичные NEXT_PUBLIC_* инлайнятся на сборке, поэтому пробрасываем их сюда.
 ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+# Адрес панели нужен именно на сборке, а не в рантайме: при output:'standalone'
+# next build вычисляет next.config.ts один раз и записывает готовые rewrite-
+# правила в routes-manifest.json. Переменная, заданная контейнеру потом, на них
+# уже не влияет - в манифест попадёт значение по умолчанию, и оптимизатор
+# next/image будет ходить за картинками в несуществующий localhost:8000.
+ARG PANEL_ORIGIN
+ENV PANEL_ORIGIN=$PANEL_ORIGIN
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

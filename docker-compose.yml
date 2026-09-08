@@ -76,16 +76,15 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_SITE_URL: https://${BASE_DOMAIN:-awwwdde.art}
+        PANEL_ORIGIN: http://panel:8000
     restart: unless-stopped
     environment:
       # Серверный рендер ходит в панель напрямую по имени сервиса,
       # минуя Caddy (см. front/src/lib/portfolio-server.ts).
       INTERNAL_API_BASE: http://panel:8000
-      # Тот же адрес нужен и rewrite-правилам в next.config.ts. Кажется, что
-      # они в проде не работают - /api и /uploads забирает Caddy, - но
-      # оптимизатор next/image живёт внутри этого контейнера и скачивает
-      # /uploads/* сам у себя, уже минуя Caddy. Без этой переменной он уходит
-      # в localhost:8000, где никто не слушает, и картинки не отдаются.
+      # Дублирует build-arg выше. На rewrite-правила уже не влияет (они
+      # запечены в манифест при сборке), но держим значение согласованным,
+      # чтобы `docker compose exec front env` не вводил в заблуждение.
       PANEL_ORIGIN: http://panel:8000
       NEXT_PUBLIC_SITE_URL: https://${BASE_DOMAIN:-awwwdde.art}
     depends_on:
