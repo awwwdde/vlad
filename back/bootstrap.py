@@ -43,18 +43,23 @@ def reconcile_caddy_routes() -> None:
             print("[reconcile] Caddy недоступен - пропускаю восстановление маршрутов")
             return
         with SessionLocal() as db:
-            projects = list(
-                db.scalars(select(Project).where(Project.status == ProjectStatus.running))
-            )
-        restored = 0
-        for p in projects:
-            try:
-                caddy.upsert_route(p.slug, domains=p.custom_domains or [])
-                restored += 1
-            except Exception as exc:  # noqa: BLE001
-                print(f"[reconcile] {p.slug}: {exc}")
-        if projects:
-            print(f"[reconcile] восстановлено маршрутов: {restored}/{len(projects)}")
+            # Same key as worker: never overwrite an in-flight publication.
+            if not db.scalar(text('SELECT pg_try_advisory_xact_lock(718496023)')):
+                print('[reconcile] Worker занят; маршруты не изменены')
+                return
+            projects = list(db.scalars(select(Project).where(
+                Project.status.in_([ProjectStatus.running, ProjectStatus.building, ProjectStatus.deploying]),
+                Project.deployed_at.is_not(None),
+            )))
+            restored = 0
+            for p in projects:
+                try:
+                    caddy.upsert_route(p.slug, upstream=p.upstream, domains=p.custom_domains or [])
+                    restored += 1
+                except Exception as exc:
+                    print(f"[reconcile] {p.slug}: {exc}")
+            if projects:
+                print(f"[reconcile] восстановлено маршрутов: {restored}/{len(projects)}")
     except Exception as exc:  # noqa: BLE001
         # Реконсайл не должен мешать старту панели.
         print(f"[reconcile] пропущен из-за ошибки: {exc}")

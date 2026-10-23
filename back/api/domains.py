@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import APIRouter
 from config import settings
 from db import get_db
-from fastapi import BackgroundTasks
 from fastapi import Depends
 from fastapi import HTTPException
 from models import Project
@@ -14,29 +13,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 import auth as auth_mod
 import caddy
-from api.deps import get_project_or_404
+from api.projects import editable_project
 
 router = APIRouter(tags=["домены"])
-
-
-def _apply_caddy_route(slug: str, domains: list[str]) -> None:
-    """Best-effort применение маршрута в Caddy. Ошибки не валят запрос —
-    маршрут переприменится при следующем deploy/start."""
-    try:
-        caddy.upsert_route(slug, domains=domains)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[domains] caddy upsert для {slug} не удался: {exc}")
 
 
 @router.post("/api/projects/{slug}/domains", response_model=ProjectOut)
 def add_domain(
     slug: str,
     payload: DomainIn,
-    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: object = Depends(auth_mod.require_auth),
 ) -> Project:
-    proj = get_project_or_404(db, slug)
+    proj = editable_project(db, slug)
     domain = payload.domain
 
     if domain == settings.base_domain or domain.endswith("." + settings.base_domain):
@@ -57,11 +46,10 @@ def add_domain(
     if domain not in current:
         current.append(domain)
     proj.custom_domains = current  # переприсваиваем — иначе SQLAlchemy не заметит мутацию JSONB
+    if proj.deployed_at:
+        caddy.upsert_route(slug, upstream=proj.upstream, domains=proj.custom_domains)
     db.commit()
     db.refresh(proj)
-
-    # Применяем в Caddy в фоне — ответ возвращается сразу.
-    background.add_task(_apply_caddy_route, slug, list(proj.custom_domains))
     return proj
 
 
@@ -69,16 +57,15 @@ def add_domain(
 def remove_domain(
     slug: str,
     domain: str,
-    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: object = Depends(auth_mod.require_auth),
 ) -> Project:
-    proj = get_project_or_404(db, slug)
+    proj = editable_project(db, slug)
     domain = domain.strip().lower().rstrip(".")
     current = [d for d in (proj.custom_domains or []) if d != domain]
     proj.custom_domains = current
+    if proj.deployed_at:
+        caddy.upsert_route(slug, upstream=proj.upstream, domains=proj.custom_domains)
     db.commit()
     db.refresh(proj)
-
-    background.add_task(_apply_caddy_route, slug, list(proj.custom_domains))
     return proj

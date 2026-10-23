@@ -1,11 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api, ApiError } from '@/admin/api'
 import type { PortfolioItem, PortfolioItemPayload, I18nBundle } from '@/admin/types'
 import { invalidatePortfolio } from '@/hooks/usePortfolio'
 import { GalleryEditor } from './GalleryEditor'
+import { CaseBundleFields } from './CaseBundleFields'
+import { useUnsavedChanges } from '@/admin/useUnsavedChanges'
+import { AdminButton, PageHeader } from '@/admin/ui'
 
 const EMPTY_BUNDLE: I18nBundle = { title: '', tagline: '', desc: '', tags: [] }
 
@@ -67,20 +70,7 @@ export default function Portfolio() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Портфолио</h1>
-          <p className="text-sm text-muted mt-1">
-            Карточки на главной (S5Work), в /work и /work/:slug. Двуязычные.
-          </p>
-        </div>
-        <button
-          onClick={() => setEditing({ item: null })}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
-        >
-          + Новый
-        </button>
-      </header>
+      <PageHeader title="Портфолио и кейсы" subtitle="Обложки, описание, задачи, решения, этапы и результаты. Отдельный контент для RU и EN." action={<AdminButton variant="primary" onClick={() => setEditing({ item: null })}>Новый проект</AdminButton>} />
 
       {error && (
         <div className="rounded-lg border border-danger/40 bg-transparent px-4 py-3 text-sm text-danger">
@@ -99,7 +89,7 @@ export default function Portfolio() {
           <motion.div
             layout
             key={it.id}
-            className="rounded-xl border border-line bg-bg p-4 flex items-center gap-4"
+            className="flex flex-wrap items-center gap-3 border-t border-line py-5 sm:gap-4"
           >
             <div
               className="w-1 self-stretch rounded-full"
@@ -196,6 +186,11 @@ function Editor(props: {
       : { ...EMPTY_ITEM },
   )
   const [busy, setBusy] = useState(false)
+  const [lang, setLang] = useState<'ru' | 'en'>('ru')
+  const [original] = useState(() => JSON.stringify(form))
+  const dirty = JSON.stringify(form) !== original
+  useUnsavedChanges(dirty)
+  const close = () => { if (!busy && (!dirty || window.confirm('Есть несохранённые изменения кейса. Закрыть без сохранения?'))) props.onClose() }
   const [error, setError] = useState<string | null>(null)
   // Галерея живёт своим состоянием: её эндпоинты отвечают обновлённой
   // карточкой, и ждать общего сохранения формы незачем.
@@ -238,10 +233,11 @@ function Editor(props: {
   }
 
   return (
-    <Modal onClose={props.onClose} title={isNew ? 'Новая карточка' : `Править · ${item!.slug}`}>
-      <form onSubmit={submit} className="space-y-5">
+    <Modal onClose={close} busy={busy} title={isNew ? 'Новый проект' : `Кейс · ${item!.slug}`}>
+      <form id="case-editor-form" onSubmit={submit} className="space-y-5">
+        <fieldset disabled={busy} className="min-w-0 space-y-6">
         {/* Общие поля */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextField
             label="slug"
             value={form.slug}
@@ -260,7 +256,7 @@ function Editor(props: {
             value={form.link ?? ''}
             onChange={v => patch({ link: v })}
             placeholder="https://…"
-            className="col-span-2"
+            className="sm:col-span-2"
           />
         </div>
 
@@ -272,7 +268,7 @@ function Editor(props: {
             images={gallery}
             onChange={updated => {
               setGallery(updated.images)
-              props.onSaved()
+              invalidatePortfolio()
             }}
           />
         ) : (
@@ -282,17 +278,9 @@ function Editor(props: {
         )}
 
         {/* Двуязычные бандлы */}
-        <div className="grid grid-cols-2 gap-4">
-          <BundleEditor
-            lang="ru"
-            bundle={form.ru}
-            onChange={p => patchBundle('ru', p)}
-          />
-          <BundleEditor
-            lang="en"
-            bundle={form.en}
-            onChange={p => patchBundle('en', p)}
-          />
+        <div className="flex gap-2" role="group" aria-label="Язык кейса">{(['ru', 'en'] as const).map(value => <AdminButton key={value} type="button" aria-pressed={lang === value} variant={lang === value ? 'primary' : 'ghost'} onClick={() => setLang(value)}>{value.toUpperCase()}</AdminButton>)}</div>
+        <div>
+          <BundleEditor key={lang} lang={lang} bundle={form[lang]} onChange={p => patchBundle(lang, p)} />
         </div>
 
         {error && (
@@ -304,7 +292,7 @@ function Editor(props: {
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            onClick={props.onClose}
+            onClick={close}
             className="rounded-md px-3 py-1.5 text-sm text-muted hover:text-fg"
           >
             Отмена
@@ -317,6 +305,7 @@ function Editor(props: {
             {busy ? 'Сохраняем…' : 'Сохранить'}
           </button>
         </div>
+        </fieldset>
       </form>
     </Modal>
   )
@@ -331,10 +320,10 @@ function BundleEditor(props: {
   return (
     <div className="rounded-xl border border-line bg-bg p-4 space-y-3">
       <div className="text-xs uppercase tracking-wider text-muted">{lang}</div>
-      <TextField label="title" value={bundle.title} onChange={v => onChange({ title: v })} />
-      <TextField label="tagline" value={bundle.tagline} onChange={v => onChange({ tagline: v })} />
+      <TextField label="Название" value={bundle.title} onChange={v => onChange({ title: v })} />
+      <TextField label="Короткое описание / слоган" value={bundle.tagline} onChange={v => onChange({ tagline: v })} />
       <label className="block space-y-1.5">
-        <span className="text-xs uppercase tracking-wider text-muted">desc</span>
+        <span className="text-xs uppercase tracking-wider text-muted">О проекте</span>
         <textarea
           value={bundle.desc}
           onChange={e => onChange({ desc: e.target.value })}
@@ -343,7 +332,7 @@ function BundleEditor(props: {
         />
       </label>
       <TextField
-        label="tags (через запятую)"
+        label="Услуги и технологии (через запятую)"
         value={bundle.tags.join(', ')}
         onChange={v =>
           onChange({
@@ -354,6 +343,7 @@ function BundleEditor(props: {
           })
         }
       />
+      <CaseBundleFields bundle={bundle} onChange={onChange} />
     </div>
   )
 }
@@ -387,7 +377,23 @@ function TextField(props: {
   )
 }
 
-function Modal(props: { onClose: () => void; title: string; children: React.ReactNode }) {
+function Modal(props: { onClose: () => void; title: string; busy: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null, overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    ref.current?.querySelector<HTMLButtonElement>('[data-close]')?.focus()
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); ref.current?.querySelector<HTMLButtonElement>('[data-close]')?.click() }
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]') ?? []).filter(e => e.getClientRects().length > 0)
+      const first = focusable[0], last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+    }
+    document.addEventListener('keydown', key)
+    return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', key); previous?.focus() }
+  }, [])
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -402,12 +408,16 @@ function Modal(props: { onClose: () => void; title: string; children: React.Reac
         exit={{ opacity: 0, y: 10, scale: 0.98 }}
         transition={{ duration: 0.2 }}
         onClick={e => e.stopPropagation()}
-        className="rounded-2xl border border-line bg-bg p-6 w-full max-w-3xl"
+        ref={ref}
+        role="dialog" aria-modal="true" aria-labelledby="case-editor-title"
+        className="my-auto max-h-[calc(100dvh-4rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-line bg-bg p-5 md:p-8"
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{props.title}</h2>
+        <div className="sticky -top-5 z-20 mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-bg py-4 md:-top-8">
+          <h2 id="case-editor-title" className="text-lg font-semibold">{props.title}</h2>
+          <AdminButton type="submit" form="case-editor-form" variant="primary" busy={props.busy}>Сохранить кейс</AdminButton>
           <button
             onClick={props.onClose}
+            data-close aria-label="Закрыть редактор"
             className="text-muted hover:text-fg text-xl leading-none"
           >
             ×

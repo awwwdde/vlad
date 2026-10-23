@@ -46,6 +46,27 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _stale(moment: datetime | None) -> bool:
+    if moment is None:
+        return True
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (_now() - moment).total_seconds() > 90
+
+
+def _last_sample(db: Session, project_id: int):
+    return db.scalar(select(func.max(MetricSample.taken_at)).where(
+        MetricSample.project_id == project_id, MetricSample.container == 'app'))
+
+
+def _collection_warning(moment):
+    if moment is None:
+        return 'Замеров ещё нет. Для опубликованного сайта проверьте Docker и сборщик метрик панели.'
+    if _stale(moment):
+        return 'Свежие замеры не поступают больше 90 секунд. Показана история, текущая нагрузка не подтверждена.'
+    return None
+
+
 def _bucket(column, seconds: int):
     """Сетка времени с произвольным шагом.
 
@@ -82,7 +103,9 @@ def project_metrics(
         if source == "raw"
         else _hourly_series(db, proj.id, since, step)
     )
+    last_sample = _last_sample(db, proj.id)
     return MetricsOut(
+        last_sample_at=last_sample, warning=_collection_warning(last_sample),
         slug=slug, range=range, resolution=source, step_seconds=step, series=series
     )
 
@@ -109,7 +132,7 @@ def _raw_series(db: Session, project_id: int, since: datetime, step: int) -> lis
     return _group(
         db.execute(stmt).all(),
         lambda r: MetricPoint(
-            t=r.t,
+            t=r._mapping['t'],
             cpu=round(float(r.cpu or 0), 2),
             mem=int(r.mem or 0),
             mem_limit=int(r.mem_limit or 0) or None,
@@ -140,7 +163,7 @@ def _hourly_series(db: Session, project_id: int, since: datetime, step: int) -> 
     return _group(
         db.execute(stmt).all(),
         lambda r: MetricPoint(
-            t=r.t,
+            t=r._mapping['t'],
             cpu=round(float(r.cpu or 0), 2),
             cpu_max=round(float(r.cpu_max or 0), 2),
             mem=int(r.mem or 0),
@@ -189,12 +212,20 @@ def project_health(
         .limit(1)
     )
 
+    collection_warning = _collection_warning(_last_sample(db, proj.id))
+    db_warning = None
+    try:
+        db_size = engine.db_size_bytes(slug) if (proj.active_config or {}).get('database_enabled', True) else None
+    except Exception:
+        db_size = None
+        db_warning = 'Размер БД недоступен: не удалось обратиться к Docker или PostgreSQL.'
     return ProjectHealthOut(
         slug=slug,
-        state=last.state if last else None,
+        state=last.state if last and not collection_warning else None,
         restarts=last.restarts if last else 0,
         uptime_percent=_uptime_percent(db, proj.id, since),
-        db_size_bytes=engine.db_size_bytes(slug),
+        db_size_bytes=db_size,
+        warning=' '.join(filter(None, [collection_warning, db_warning])) or None,
         events=[HealthEventOut.model_validate(e) for e in events],
     )
 
@@ -224,7 +255,7 @@ def _uptime_percent(db: Session, project_id: int, since: datetime) -> float | No
             MetricSample.project_id == project_id,
             MetricSample.container == "app",
             MetricSample.taken_at >= since,
-            MetricSample.mem_bytes > 0,
+            (MetricSample.state == 'running') | ((MetricSample.state.is_(None)) & (MetricSample.mem_bytes > 0)),
         )
     )
     return round((alive or 0) / total * 100, 1)
@@ -280,12 +311,18 @@ def overview(
         )
     ).scalars().all()
 
-    load: dict[int, dict[str, float]] = {}
+    load: dict[int, dict] = {}
+    by_id = {project.id: project for project in projects}
     for s in rows:
-        acc = load.setdefault(s.project_id, {"cpu": 0.0, "mem": 0, "limit": 0})
+        if s.container == 'db' and not (by_id[s.project_id].active_config or {}).get('database_enabled', True):
+            continue
+        acc = load.setdefault(s.project_id, {"cpu": 0.0, "mem": 0, "limit": 0, 'last': None, 'stale': False})
+        if s.container == 'app':
+            acc['last'] = s.taken_at
+        acc['stale'] = acc['stale'] or _stale(s.taken_at)
         acc["cpu"] += s.cpu_percent
         acc["mem"] += s.mem_bytes
-        acc["limit"] = max(acc["limit"], s.mem_limit_bytes)
+        acc["limit"] += s.mem_limit_bytes
 
     # Последнее событие здоровья на проект - тем же приёмом, что и замеры.
     last_event = (
@@ -306,30 +343,34 @@ def overview(
 
     out: list[ProjectLoadOut] = []
     for proj in projects:
-        acc = load.get(proj.id, {"cpu": 0.0, "mem": 0, "limit": 0})
+        acc = load.get(proj.id, {"cpu": 0.0, "mem": 0, "limit": 0, 'last': None, 'stale': True})
+        stale = acc['stale'] or _stale(acc['last'])
         ev = health.get(proj.id)
         out.append(
             ProjectLoadOut(
                 slug=proj.slug,
                 title=proj.title,
                 status=proj.status,
-                cpu_percent=round(acc["cpu"], 2),
-                mem_bytes=int(acc["mem"]),
-                state=ev.state if ev else None,
+                cpu_percent=round(acc["cpu"], 2) if not stale else None,
+                mem_bytes=int(acc["mem"]) if not stale else None,
+                last_sample_at=acc['last'],
+                state=ev.state if ev and not stale else None,
                 restarts=ev.restarts if ev else 0,
-                attention=_attention(proj, acc, ev),
+                attention=('нет свежих замеров; проверьте Docker и сборщик' if stale and proj.status != ProjectStatus.created else _attention(proj, acc, ev)),
             )
         )
 
     # Проблемные наверх: дашборд должен открываться тем, что требует действий.
-    out.sort(key=lambda p: (p.attention is None, -p.cpu_percent))
+    out.sort(key=lambda p: (p.attention is None, -(p.cpu_percent or 0)))
+    incomplete = any(p.cpu_percent is None for p in out if p.status != ProjectStatus.created)
 
     return OverviewOut(
+        warning='Сводка неполная: нет свежих замеров для части сайтов. Текущие итоги недоступны.' if incomplete else None,
         at=_now(),
         projects_total=len(projects),
         projects_running=sum(1 for p in projects if p.status == ProjectStatus.running),
-        cpu_percent_total=round(sum(p.cpu_percent for p in out), 2),
-        mem_bytes_total=sum(p.mem_bytes for p in out),
+        cpu_percent_total=None if incomplete else round(sum(p.cpu_percent or 0 for p in out), 2),
+        mem_bytes_total=None if incomplete else sum(p.mem_bytes or 0 for p in out),
         projects=out,
     )
 

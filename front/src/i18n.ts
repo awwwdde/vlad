@@ -4,6 +4,7 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from './locales/en.json'
 import ru from './locales/ru.json'
+import { mergeDefaults } from './lib/mergeDefaults'
 
 export const LANGS = ['ru', 'en'] as const
 export type Lang = (typeof LANGS)[number]
@@ -32,7 +33,10 @@ async function fetchAndMerge(lang: Lang): Promise<void> {
     if (!r.ok) return
     const payload = (await r.json()) as { data: Record<string, unknown> }
     if (payload?.data && Object.keys(payload.data).length) {
-      i18n.addResourceBundle(lang, 'translation', payload.data, true, true)
+      // Replace the namespace after filling absent keys: deep-merging directly
+      // into the live store can retain deleted array items from an older edit.
+      const complete = mergeDefaults(lang === 'ru' ? ru : en, payload.data)
+      i18n.addResourceBundle(lang, 'translation', complete, false, true)
     }
   } catch {
     /* offline или бек упал: остаёмся на бандленных дефолтах */
@@ -55,7 +59,7 @@ export function setLang(lang: Lang): void {
 
 // Клиентские сайд-эффекты. Модуль помечен 'use client', но при SSR он всё
 // равно выполняется на сервере, поэтому окно проверяем явно.
-if (typeof window !== 'undefined') {
+export function startTranslationSync(): () => void {
   void refreshTranslations()
 
   if ('BroadcastChannel' in window) {
@@ -64,7 +68,9 @@ if (typeof window !== 'undefined') {
     ch.onmessage = ev => {
       if (ev.data?.type === 'invalidate') void refreshTranslations()
     }
+    return () => ch.close()
   }
+  return () => {}
 }
 
 export default i18n

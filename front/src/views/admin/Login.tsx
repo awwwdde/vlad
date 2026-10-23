@@ -2,29 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
 import { useAuth } from '@/admin/AuthContext'
 import { ApiError } from '@/admin/api'
 import { AdminButton, ErrorNote, Field, INPUT_CLASS } from '@/admin/ui'
 import { Logo } from '@/components/Logo'
-import { HERO_VEIL } from '@/components/hero/tokens'
-import { PALETTE } from '@/components/immersive-scene/config'
+import { PORTFOLIO_THEME } from '@/lib/siteTheme'
 
-// Та же сцена, что в герое сайта. Грузится отдельным чанком и только в
-// браузере: Three.js не умеет в SSR, а форма входа не должна ждать сцену -
-// до её загрузки справа стоит ровная заливка цветом поляны.
-const ImmersiveScene = dynamic(
-  () => import('@/components/immersive-scene/ImmersiveScene').then(m => m.ImmersiveScene),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="absolute inset-0" style={{ backgroundColor: PALETTE.grass }} />
-    ),
-  },
-)
-
-const EASE = [0.16, 1, 0.3, 1] as const
 
 export default function Login() {
   const { login, user } = useAuth()
@@ -59,19 +42,16 @@ export default function Login() {
   }
 
   return (
-    <div className="admin-root grid min-h-[100dvh] bg-bg text-fg lg:grid-cols-2">
+    <div className={`admin-root grid min-h-[100dvh] lg:grid-cols-2 ${PORTFOLIO_THEME}`}>
       {/* ── Форма ───────────────────────────────────────────────────────── */}
       <div className="flex items-center px-6 py-16 sm:px-12 lg:px-16 xl:px-24">
-        <motion.form
+        <form
           onSubmit={onSubmit}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: EASE }}
           className="flex w-full max-w-sm flex-col gap-7"
         >
           <div>
             <Logo className="h-6 text-fg" />
-            <h1 className="mt-6 text-[28px] font-semibold tracking-[-0.03em]">
+            <h1 className="mt-9 text-[clamp(36px,4vw,60px)] font-medium leading-[1.05] tracking-[-0.05em]">
               Панель управления
             </h1>
             <p className="mt-2 font-ui text-[14px] text-muted">
@@ -109,29 +89,27 @@ export default function Login() {
           <AdminButton type="submit" variant="primary" busy={busy} className="self-start px-7">
             Войти
           </AdminButton>
-        </motion.form>
+        </form>
       </div>
 
       {/* ── Сцена ───────────────────────────────────────────────────────── */}
       {/* Ниже lg половина со сценой убирается совсем, а не сжимается в полоску:
           на узком экране от кадра остались бы одни поля, а форма уехала бы
           под сгиб. */}
-      <div className="relative hidden overflow-hidden lg:block">
-        <ImmersiveScene className="absolute inset-0" />
+      <div className="relative hidden overflow-hidden bg-[#3c5868] bg-[url('/sky-fallback.svg')] bg-cover bg-center lg:block">
 
         {/* Та же заливка, что в герое: под ней белый текст читается одинаково
             и над светлой поляной, и над тенью кроны. */}
         <div
-          className="pointer-events-none absolute inset-0"
-          style={{ backgroundColor: `rgba(10, 16, 6, ${HERO_VEIL})` }}
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent,rgb(27_46_58_/_65%))]"
         />
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 p-10">
-          <p className="font-ui text-[14px] font-medium tracking-tight text-white">
+          <p className="text-[clamp(40px,6vw,96px)] font-medium tracking-[-.065em] text-white">
             awwwdde
           </p>
           <p className="mt-1 font-ui text-[13px] text-white/70">
-            Fullstack developer
+            [ control room ]
           </p>
         </div>
       </div>

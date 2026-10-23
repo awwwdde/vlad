@@ -2,15 +2,22 @@
   "nav": {
     "work": "Work",
     "about": "About",
-    "contact": "Contact"
+    "contact": "Contact",
+    "projects": "Projects",
+    "all_projects": "All projects",
+    "main": "Main navigation",
+    "menu": "Open menu",
+    "contacts": "Contact",
+    "close_menu": "Close menu"
   },
   "common": {
     "cta_contact": "Start a project",
     "cta_work": "See the work",
-    "email": "Ohaww@yandex.ru",
+    "email": "message@awwwdde.art",
     "loading": "Loading"
   },
   "home": {
+    "cost_calculator": "Website cost calculator",
     "availability": "One slot open for October",
     "hero_line1": "Websites that",
     "hero_line2": "pay for themselves",
@@ -26,6 +33,7 @@
     "cta_title": "Tell me about the project",
     "cta_body": "I reply within a day. If it is not my kind of work, I say so and point you somewhere better.",
     "craft_title": "How I build",
+    "craft_ascii_label": "A 3D ASCII awwwdde mark that falls apart into particles on scroll and reassembles after the projects.",
     "craft_lead": "Three steps and one person across all of them. No handoffs between a designer, a markup guy and an admin, where half the idea usually gets lost.",
     "stack_ui": "Interface",
     "stack_server": "Server",
@@ -36,14 +44,54 @@
     "cta_terms_body": "A landing page takes two or three weeks, a site with an admin panel one and a half to two months. I quote after reading the task and before starting, and the number does not grow along the way.",
     "cta_next_label": "What happens next",
     "cta_next_body": "I read your message, ask what is unclear and send back a list of fixes with timings. It commits you to nothing: if we do not fit, you keep the review of your site.",
-    "cta_direct": "Or straight to email"
+    "cta_direct": "Or straight to email",
+    "sky_title1": "Websites with character.",
+    "easter_hero": "Character found.",
+    "easter_craft": "No magic. Almost.",
+    "easter_contact": "Hello, next project.",
+    "easter_hint": "Activate to reveal a hidden phrase. Escape to close.",
+    "sky_title2": "From the first idea",
+    "sky_title3": "to launch.",
+    "sky_description": "I'm Vladislav — a designer and developer.\nI create websites and interfaces,\nconsidering every detail.",
+    "sky_work": "View projects",
+    "sky_contact": "Get in touch",
+    "stack_ui_items": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Tailwind CSS",
+      "Motion",
+      "Three.js"
+    ],
+    "stack_server_items": [
+      "Python",
+      "FastAPI",
+      "Node.js",
+      "PostgreSQL"
+    ],
+    "stack_infra_items": [
+      "Docker",
+      "Caddy",
+      "Linux",
+      "CI"
+    ]
   },
   "work": {
-    "title": "Work",
+    "title": "Projects",
+    "list_label": "All projects",
+    "secret": "An idea takes shape.",
+    "hover_hint": "Hover over the text to reveal an ASCII object. Tap on mobile. Escape to close.",
+    "next_title": "Your project could be next.",
+    "next_body": "Tell me what you have in mind. Together, we’ll find the right form for it.",
     "sub": "Projects from the last few years: commercial sites, services and internal panels.",
     "empty": "Nothing here yet. Projects show up after the first one is published."
   },
   "project": {
+    "secret": "It starts with an idea.",
+    "details": "In detail",
+    "image_alt": "{{title}} — screen {{n}}",
+    "discuss": "Have a project in mind?",
+    "more": "More projects",
     "not_found": "No such project",
     "back": "All work",
     "overview": "About the project",
@@ -53,16 +101,69 @@
     "next": "Next project",
     "no_image": "Preview coming later",
     "position": "Project {{n}} of {{total}}",
-    "prev": "Previous project"
+    "prev": "Previous project",
+    "client": "Client",
+    "year": "Year",
+    "role": "Role",
+    "duration": "Timeline",
+    "thinking": "Challenge and approach",
+    "challenge": "The challenge",
+    "approach": "The approach",
+    "process": "From the brief to a working product.",
+    "outcome": "The outcome",
+    "deliverables": "What was delivered"
   },
   "about": {
+    "hero_role": "Designer and developer. From the first idea to a working website.",
+    "read_more": "Get to know me",
+    "story_title": "One person. The whole process.",
+    "understand_title": "Understand",
+    "understand_body": "First, the problem and the people the website is for. I find what matters and remove what gets in the way.",
+    "design_title": "Find its form",
+    "design_body": "I bring structure, visual character, and interaction together. Every detail should work as part of the whole.",
+    "build_title": "Bring it to life",
+    "build_body": "I turn the design into a working product, considering responsive layouts, interactions, and how it will run on a server.",
+    "tools_title": "Tools for the task.",
+    "tools_body": "I choose technology around what needs to be built. A good stack helps the project work well and keep growing.",
+    "interface": "Interface and motion",
+    "logic": "Logic and data",
+    "launch": "Launch and infrastructure",
+    "contact_title": "Let’s give your idea a form.",
+    "contact_body": "Tell me what you want to make. We’ll start with the problem and find the right way forward.",
+    "see_work": "Explore my work",
     "title": "Vlad",
     "lead": "Web developer. I build sites end to end: from the layout to the server it runs on.",
     "body1": "I started by cutting other people's mockups, now I usually take the whole project. Fewer seams that way: the person drawing the screen and the person deploying it is the same person.",
     "body2": "I work with small businesses and teams under ten people. I like problems where the result shows up in numbers, not only in compliments.",
     "stack_title": "Tools",
     "now_title": "Right now",
-    "now_body": "Building a control panel for my own hosting: container deploys for guest sites, domains, logs and load metrics."
+    "now_body": "Building a control panel for my own hosting: container deploys for guest sites, domains, logs and load metrics.",
+    "brand": "awwwdde",
+    "tools_interface": [
+      "Figma",
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Tailwind CSS",
+      "Motion"
+    ],
+    "tools_logic": [
+      "Python",
+      "FastAPI",
+      "Node.js",
+      "PostgreSQL"
+    ],
+    "tools_launch": [
+      "Docker",
+      "Linux",
+      "CI"
+    ],
+    "page_label": "Behind the interface",
+    "manifest_line1": "Purpose.",
+    "manifest_line2": "Form.",
+    "manifest_line3": "Character.",
+    "work_transition": "See the thinking in the work.",
+    "now_action": "Right now. Activate three times to find an easter egg."
   },
   "contact": {
     "title": "Contact",
@@ -81,11 +182,19 @@
     "err_name": "Please add a name",
     "err_email": "Check the email address",
     "err_message": "Describe the task, even briefly",
-    "direct": "Or directly"
+    "direct": "Or directly",
+    "headline": "Let’s talk.",
+    "brief": "A few sentences are enough: what you want to build, when you need it, and what is already ready.",
+    "form_link": "Tell me your idea",
+    "form_title": "Start with a conversation."
   },
   "footer": {
     "made": "Made in Moscow",
-    "rights": "All rights reserved"
+    "rights": "All rights reserved",
+    "socials_label": "Social profiles",
+    "documents_label": "Personal data documents",
+    "privacy_label": "Privacy policy",
+    "consent_label": "Data processing consent"
   },
   "coming": {
     "label": "Site in progress",

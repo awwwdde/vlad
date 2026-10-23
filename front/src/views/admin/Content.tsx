@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '@/admin/api'
 import { AdminButton, ErrorNote, INPUT_CLASS, PageHeader } from '@/admin/ui'
 import { cn } from '@/lib/cn'
+import { contentDefaults, mergeDefaults } from '@/lib/contentDefaults'
+import { useUnsavedChanges } from '@/admin/useUnsavedChanges'
 import { SECTION_LABELS, humanizeKey } from './contentLabels'
 import {
   collectLeaves,
@@ -34,6 +36,9 @@ import {
  */
 type Lang = 'ru' | 'en'
 const LANGS: Lang[] = ['ru', 'en']
+// Legacy records stay in storage, but fields no longer used by the public UI
+// must not mislead the editor. Contacts now have one source in site settings.
+const HIDDEN = new Set(['common.email', 'about.title', 'about.brand', 'about.page_label', 'about.lead', 'about.stack_title', 'about.contact_title', 'about.contact_body', 'about.see_work', 'about.eyebrow', 'about.photo', 'about.portrait_alt', 'footer.made', 'footer.rights'])
 
 interface Bundle {
   lang: string
@@ -67,12 +72,15 @@ export default function Content() {
     Promise.all(LANGS.map(l => api<Bundle>(`/api/content/translations/${l}`)))
       .then(([ru, en]) => {
         if (cancelled) return
-        const loaded: Bundles = { ru: ru.data, en: en.data }
+        const loaded = {
+          ru: mergeDefaults(contentDefaults.ru, ru.data),
+          en: mergeDefaults(contentDefaults.en, en.data),
+        } as Bundles
         setData(loaded)
-        // Глубокая копия: снимок не должен меняться вместе с правками.
-        setSaved(JSON.parse(JSON.stringify(loaded)))
+        // Missing new fields count as unsaved until explicitly published.
+        setSaved(JSON.parse(JSON.stringify({ ru: ru.data, en: en.data })))
         setUpdatedAt(ru.updated_at)
-        setSection(prev => prev ?? Object.keys(ru.data)[0] ?? null)
+        setSection(prev => prev ?? Object.keys(loaded.ru)[0] ?? null)
       })
       .catch(e => {
         if (!cancelled) setError(e instanceof ApiError ? e.message : String(e))
@@ -104,12 +112,7 @@ export default function Content() {
 
   // Предупреждение при закрытии вкладки. Уход по внутренней ссылке этим не
   // ловится, поэтому несохранённое дополнительно помечено в списке разделов.
-  useEffect(() => {
-    if (dirtyLangs.length === 0) return
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirtyLangs.length])
+  useUnsavedChanges(dirtyLangs.length > 0)
 
   function patch(path: string[], value: JsonValue) {
     setData(d =>
@@ -130,9 +133,11 @@ export default function Content() {
           body: { data: data[l] },
         })
         setUpdatedAt(r.updated_at)
+        // Each language is acknowledged separately: a failure saving EN must
+        // not make a successfully saved RU bundle appear unsaved.
+        setSaved(prev => prev ? { ...prev, [l]: JSON.parse(JSON.stringify(data[l])) } : prev)
+        channel?.postMessage({ type: 'invalidate' })
       }
-      setSaved(JSON.parse(JSON.stringify(data)))
-      channel?.postMessage({ type: 'invalidate' })
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e))
     } finally {
@@ -142,14 +147,14 @@ export default function Content() {
 
   const results = useMemo(() => {
     if (!data || !query.trim()) return null
-    return collectLeaves(data[lang]).filter(l => matches(l, query))
+    return collectLeaves(data[lang]).filter(l => !HIDDEN.has(l.path.join('.')) && matches(l, query))
   }, [data, lang, query])
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Контент"
-        subtitle="Тексты сайта: заголовки, кнопки, подписи. Сохранение применяется сразу, без пересборки."
+        subtitle="Все тексты и списки RU / EN. Новые поля добавляются из актуального сайта; сохранённые правки остаются. Сохранение публикует изменения."
         action={
           <div className="flex items-center gap-4">
             <span className="font-ui text-[12px] text-muted">
@@ -195,6 +200,7 @@ export default function Content() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Поиск по тексту или ключу"
+          aria-label="Поиск текстов сайта"
           className={cn(INPUT_CLASS, 'max-w-md flex-1')}
         />
       </div>
@@ -500,7 +506,7 @@ function ValueEditor({
   }
 
   if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value)
+    const entries = Object.entries(value).filter(([key]) => !HIDDEN.has([...path, key].join('.')))
     const nested = path.length > 1
     return (
       <fieldset

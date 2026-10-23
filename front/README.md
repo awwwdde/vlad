@@ -49,7 +49,7 @@ npm run dev
 ## Тема и токены
 
 Одна тема на весь сайт, переключается по `prefers-color-scheme`. Цвета живут
-в CSS-переменных в `src/index.css`, Tailwind ссылается на них через
+в CSS-переменных, заданных через Tailwind `addBase` в `tailwind.config.js`; Tailwind ссылается на них через
 `rgb(var(--x) / <alpha-value>)`. Радиусы: всё прямоугольное, кнопки-пилюли.
 
 ## Превью проектов

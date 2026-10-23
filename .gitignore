@@ -1,7 +1,12 @@
 # ── Секреты ──────────────────────────────────────────────────────────────────
 .env
 .env.local
+.env.*
+!.env.example
+!.env.*.example
 *.local
+*.pem
+*.key
 
 # ── Окружения и зависимости ──────────────────────────────────────────────────
 __pycache__/
@@ -9,30 +14,71 @@ __pycache__/
 .venv/
 venv/
 node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # ── Сборка ───────────────────────────────────────────────────────────────────
 .next/
 next-env.d.ts
 *.tsbuildinfo
+dist/
+build/
+coverage/
+.turbo/
+.vercel/
+playwright-report/
+test-results/
 
 # ── Данные ───────────────────────────────────────────────────────────────────
 workspaces/
 *.db
+uploads/
+backups/
+awwwdde-backups/
+*.dump
+*.sql.gz
+*.log
+*.tmp
+*.bak
 
 # ── Инструменты ИИ ───────────────────────────────────────────────────────────
 # Локальная оснастка ассистентов: наборы навыков и конфиг запуска.
 # К самому проекту отношения не имеет, в репозитории только шумит.
 .agents/
 .claude/
+.codex/
+.ai/
+.aider/
+Claude outputs/
 skills-lock.json
 CLAUDE.md
 AGENTS.md
+GEMINI.md
+.github/copilot-instructions.md
 .cursor/
 .cursorrules
 .windsurfrules
 .aider*
 
+# Локальные настройки редакторов и ОС.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
 # ── Черновики документации ───────────────────────────────────────────────────
 # Актуальные документы: README.md, DEPLOY.md, GUEST.md, front/README.md.
 # План редизайна описывал направление, от которого отказались.
 REDESIGN.md
+/docs/admin-subsites-roadmap.md
+/docs/admin-ui/
+/docs/home-redesign/*
+# Инструкция настройки формы и документов — часть проекта.
+!/docs/home-redesign/privacy-setup.md
+/front/tests/admin-preview.mjs

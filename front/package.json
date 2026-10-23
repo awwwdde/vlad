@@ -8,9 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test:motion": "node --experimental-strip-types tests/logoRotation.test.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@phosphor-icons/react": "^2.1.10",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",

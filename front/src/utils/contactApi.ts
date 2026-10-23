@@ -12,6 +12,8 @@ export interface ContactPayload {
   message?: string
   budget?: string
   source: 'home' | 'about' | string
+  consent: boolean
+  consent_version: string
 }
 
 export async function submitContact(payload: ContactPayload): Promise<void> {

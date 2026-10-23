@@ -35,7 +35,16 @@ export const metadata: Metadata = {
   },
   description:
     'Проектирую и собираю сайты: от прототипа до продакшена. React, Next.js, интерфейсы, которые работают на задачу.',
-  icons: { icon: '/favicon.svg' },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-light-32.png', type: 'image/png', sizes: '32x32', media: '(prefers-color-scheme: light)' },
+      { url: '/favicon-dark-32.png', type: 'image/png', sizes: '32x32', media: '(prefers-color-scheme: dark)' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: [{ url: '/apple-touch-icon.png', sizes: '512x512', type: 'image/png' }],
+  },
+  manifest: '/manifest.webmanifest',
   verification: { yandex: 'd19150c146b0f019' },
   openGraph: {
     type: 'website',

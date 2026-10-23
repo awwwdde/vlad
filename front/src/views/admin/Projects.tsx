@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/cn'
 import { api, ApiError } from '@/admin/api'
 import type { ActionResult, EnvVar, EnvVarReveal, Project } from '@/admin/types'
-import { AdminButton, ErrorNote, PageHeader, StatusBadge } from '@/admin/ui'
+import { AdminButton, ErrorNote, INPUT_CLASS, PageHeader, StatusBadge } from '@/admin/ui'
 import { STATUS_META } from './projectStatus'
 import { ProjectLoad } from './ProjectLoad'
+import { ProjectDeployDialog } from './ProjectDeployDialog'
 
 type Busy = Record<string, string | undefined>  // slug → текущее действие
 
@@ -19,6 +21,9 @@ export default function Projects() {
   const [envFor, setEnvFor] = useState<Project | null>(null)
   const [domainsFor, setDomainsFor] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [deployFor, setDeployFor] = useState<Project | null>(null)
+  const [deployInitialTab, setDeployInitialTab] = useState<'settings' | 'console'>('settings')
+  const [query, setQuery] = useState(''), [status, setStatus] = useState('all')
   // Раскрытый стенд. Один за раз: две простыни графиков рядом невозможно
   // сравнивать, а прокрутка до второй превращается в поиск.
   const [openSlug, setOpenSlug] = useState<string | null>(null)
@@ -32,13 +37,27 @@ export default function Projects() {
 
   const reload = useCallback(() => {
     api<Project[]>('/api/projects')
-      .then(setProjects)
+      .then(data => { setProjects(data); setError(null) })
       .catch(e => setError(e.message ?? String(e)))
   }, [])
 
   useEffect(() => {
     reload()
   }, [reload])
+
+  const watching = Object.values(busy).some(Boolean) || Boolean(projects?.some(project => project.status === 'building' || project.status === 'deploying'))
+  useEffect(() => {
+    if (!watching) return
+    let cancelled = false, pending = false
+    const timer = window.setInterval(async () => {
+      if (pending) return
+      pending = true
+      try { const data = await api<Project[]>('/api/projects'); if (!cancelled) setProjects(data) }
+      catch { /* Keep the latest state; the active operation reports its error. */ }
+      finally { pending = false }
+    }, 3000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [watching])
 
   // Универсальная обёртка над любым действием: помечаем slug как busy,
   // дёргаем API, мёрджим обновлённый проект в список.
@@ -52,6 +71,7 @@ export default function Projects() {
     try {
       const r = await run()
       if (r && 'project' in r) {
+        if (action === 'deploy') { setDeployInitialTab('console'); setDeployFor(r.project) }
         setProjects(ps =>
           (ps ?? []).map(p => (p.slug === slug ? r.project : p)),
         )
@@ -65,11 +85,12 @@ export default function Projects() {
     }
   }
 
+  const filtered = projects?.filter(p => (status === 'all' || p.status === status) && `${p.title ?? ''} ${p.slug} ${p.domain} ${(p.custom_domains ?? []).join(' ')}`.toLowerCase().includes(query.toLowerCase()))
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Под-сайты"
-        subtitle="Каждый сайт — пара контейнеров (app + postgres) в общей docker-сети. Нажми на стенд, чтобы посмотреть нагрузку."
+        title="Подсайты"
+        subtitle="Состояние сайтов, домены, переменные и журналы. Раскрой сайт, чтобы посмотреть его нагрузку."
         action={
           <AdminButton variant="primary" onClick={() => setShowNew(true)}>
             Новый стенд
@@ -78,8 +99,9 @@ export default function Projects() {
       />
 
       {error && <ErrorNote>{error}</ErrorNote>}
+      <div className="flex flex-wrap items-center gap-3"><input aria-label="Поиск подсайтов" placeholder="Название, адрес или slug" value={query} onChange={event => setQuery(event.target.value)} className={`${INPUT_CLASS} min-w-0 sm:max-w-sm`} /><select aria-label="Состояние сайта" value={status} onChange={event => setStatus(event.target.value)} className={`${INPUT_CLASS} sm:max-w-[220px]`}><option value="all">Все состояния</option>{Object.entries(STATUS_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}</select><AdminButton onClick={reload}>Обновить</AdminButton></div>
 
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-4">
         {projects === null && (
           <div className="font-ui text-[13px] text-muted">Загрузка…</div>
         )}
@@ -88,21 +110,15 @@ export default function Projects() {
             Пока ни одного стенда. Нажми «Новый стенд», чтобы добавить.
           </div>
         )}
-        {projects?.map(p => (
+        {projects && projects.length > 0 && filtered?.length === 0 && <p role="status" className="py-12 text-muted">Ничего не найдено. Измени поиск или состояние.</p>}
+        {filtered?.map(p => (
           <ProjectCard
             key={p.id}
             project={p}
             busy={busy[p.slug]}
             open={openSlug === p.slug}
             onToggle={() => setOpenSlug(cur => (cur === p.slug ? null : p.slug))}
-            onDeploy={() =>
-              act(p.slug, 'deploy', () =>
-                api<ActionResult>(`/api/projects/${p.slug}/deploy`, {
-                  method: 'POST',
-                  body: {},
-                }),
-              )
-            }
+            onDeploy={() => { setDeployInitialTab('settings'); setDeployFor(p) }}
             onStop={() =>
               act(p.slug, 'stop', () =>
                 api<ActionResult>(`/api/projects/${p.slug}/stop`, { method: 'POST' }),
@@ -113,6 +129,8 @@ export default function Projects() {
                 api<ActionResult>(`/api/projects/${p.slug}/start`, { method: 'POST' }),
               )
             }
+            onDeploySettings={() => { setDeployInitialTab('settings'); setDeployFor(p) }}
+            onConsole={() => { setDeployInitialTab('console'); setDeployFor(p) }}
             onLogs={() => setLogsFor(p)}
             onEnv={() => setEnvFor(p)}
             onDomains={() => setDomainsFor(p)}
@@ -133,12 +151,14 @@ export default function Projects() {
         {showNew && (
           <NewProjectModal
             onClose={() => setShowNew(false)}
-            onCreated={() => {
+            onCreated={project => {
               setShowNew(false)
+              setDeployInitialTab('settings'); setDeployFor(project)
               reload()
             }}
           />
         )}
+        {deployFor && <ProjectDeployDialog initialTab={deployInitialTab} project={projects?.find(project => project.slug === deployFor.slug) ?? deployFor} busy={Boolean(busy[deployFor.slug])} onClose={() => setDeployFor(null)} onSaved={updateProject} onDeploy={() => { const slug = deployFor.slug; void act(slug, 'deploy', () => api<ActionResult>(`/api/projects/${slug}/deploy`, { method: 'POST', body: {} })) }} />}
         {logsFor && (
           <LogsModal project={logsFor} onClose={() => setLogsFor(null)} />
         )}
@@ -154,14 +174,8 @@ export default function Projects() {
             project={envFor}
             onClose={() => setEnvFor(null)}
             onRedeploy={() => {
-              const slug = envFor.slug
               setEnvFor(null)
-              act(slug, 'deploy', () =>
-                api<ActionResult>(`/api/projects/${slug}/deploy`, {
-                  method: 'POST',
-                  body: {},
-                }),
-              )
+              setDeployInitialTab('settings'); setDeployFor(envFor)
             }}
           />
         )}
@@ -180,6 +194,8 @@ function ProjectCard(props: {
   onDeploy: () => void
   onStop: () => void
   onStart: () => void
+  onConsole: () => void
+  onDeploySettings: () => void
   onLogs: () => void
   onEnv: () => void
   onDomains: () => void
@@ -187,11 +203,11 @@ function ProjectCard(props: {
 }) {
   const { project: p, busy, open } = props
   const meta = STATUS_META[p.status]
-  const inFlight = busy !== undefined
+  const inFlight = busy !== undefined || p.status === 'building' || p.status === 'deploying'
   const customDomains = p.custom_domains ?? []
 
   return (
-    <motion.div layout className="border-t border-line">
+    <motion.div layout className="rounded-2xl border border-line bg-white/20 px-5 md:px-6">
       {/* Кликабельна только шапка блока. Кнопки действий лежат рядом, а не
           внутри неё: вложенная кнопка невалидна, да и промах по «Удалить»
           вместо раскрытия слишком дорого стоит. */}
@@ -221,6 +237,10 @@ function ProjectCard(props: {
         </span>
       </button>
 
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3">
+        <a href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" className="break-all text-sm font-medium text-fg underline decoration-line underline-offset-4 transition-colors hover:text-accent">Открыть {p.domain} ↗</a>
+        <span className="text-xs text-muted">{p.deployed_at ? `Выкладка: ${new Date(p.deployed_at).toLocaleString('ru-RU')}` : 'Ещё не опубликован'}</span>
+      </div>
       <div className="flex flex-wrap items-center gap-2 pb-5">
         <AdminButton
           variant="primary"
@@ -239,8 +259,11 @@ function ProjectCard(props: {
             Запустить
           </AdminButton>
         )}
-        <AdminButton onClick={props.onLogs} disabled={inFlight}>
-          Логи
+        <Link to={`/projects/${p.slug}`} className="inline-flex min-h-11 items-center rounded-full border border-line px-5 py-2.5 text-sm font-medium hover:border-fg">Управление сайтом ↗</Link>
+        <AdminButton onClick={props.onConsole}>Консоль</AdminButton>
+        <AdminButton onClick={props.onDeploySettings}>Выкладка</AdminButton>
+        <AdminButton onClick={props.onLogs}>
+          Логи приложения
         </AdminButton>
         <AdminButton onClick={props.onEnv} disabled={inFlight}>
           .env
@@ -313,11 +336,10 @@ function ProjectCard(props: {
 
 // ── Модалка: новый проект ───────────────────────────────────────────────────
 
-function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) {
+function NewProjectModal(props: { onClose: () => void; onCreated: (project: Project) => void }) {
   const [slug, setSlug] = useState('')
   const [title, setTitle] = useState('')
   const [source, setSource] = useState('')
-  const [deployNow, setDeployNow] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -326,7 +348,7 @@ function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) 
     setBusy(true)
     setError(null)
     try {
-      await api('/api/projects', {
+      const project = await api<Project>('/api/projects', {
         method: 'POST',
         body: {
           slug: slug.trim().toLowerCase(),
@@ -334,13 +356,7 @@ function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) 
           source: source.trim() || null,
         },
       })
-      if (deployNow) {
-        await api(`/api/projects/${slug.trim().toLowerCase()}/deploy`, {
-          method: 'POST',
-          body: {},
-        })
-      }
-      props.onCreated()
+      props.onCreated(project)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err))
     } finally {
@@ -379,14 +395,7 @@ function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) 
           />
         </Field>
 
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={deployNow}
-            onChange={e => setDeployNow(e.target.checked)}
-          />
-          Развернуть сразу после создания
-        </label>
+        <p className="text-sm leading-relaxed text-muted">После создания откроются настройки выкладки: порт, Dockerfile, проверка готовности и лимиты. Сборка запускается отдельной кнопкой.</p>
 
         {error && (
           <div className="rounded-lg border border-danger/40 bg-transparent px-3 py-2 text-sm text-danger">
@@ -407,7 +416,7 @@ function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) 
             disabled={busy}
             className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
           >
-            {busy ? 'Создаём…' : 'Создать'}
+            {busy ? 'Создаём…' : 'Создать и настроить'}
           </button>
         </div>
       </form>
@@ -417,7 +426,7 @@ function NewProjectModal(props: { onClose: () => void; onCreated: () => void }) 
 
 // ── Модалка: логи ───────────────────────────────────────────────────────────
 
-function LogsModal({ project, onClose }: { project: Project; onClose: () => void }) {
+export function LogsModal({ project, onClose }: { project: Project; onClose: () => void }) {
   const [logs, setLogs] = useState<string>('Загрузка…')
 
   useEffect(() => {
@@ -462,7 +471,7 @@ function Field(props: { label: string; hint?: string; children: React.ReactNode 
 // можно «подсмотреть» через GET /env/{key}/reveal — один раз, без кэша.
 // Preset «Bootstrap-админ» заполняет BOOTSTRAP_ADMIN_EMAIL + случайный пароль.
 
-function EnvModal({
+export function EnvModal({
   project,
   onClose,
   onRedeploy,
@@ -716,7 +725,7 @@ function EnvModal({
 // Привязка/отвязка доменов. Домен сразу прописывается в Caddy; TLS выпустится
 // автоматически, как только A-запись домена укажет на IP сервера.
 
-function DomainsModal({
+export function DomainsModal({
   project,
   onClose,
   onUpdated,

@@ -6,6 +6,8 @@ import { SiteHeader } from './SiteHeader'
 import { SiteFooter } from './SiteFooter'
 import ComingSoon from '@/views/ComingSoon'
 import { flagBool, useSiteSettings } from '@/hooks/useSiteSettings'
+import type { PortfolioItem } from '@/admin/types'
+import { PORTFOLIO_THEME } from '@/lib/siteTheme'
 
 // Обход заглушки для владельца сайта: `?preview` в адресе или успешный вход
 // в админку (AuthContext ставит тот же ключ).
@@ -29,7 +31,7 @@ function usePreviewBypass(): boolean {
   return bypass
 }
 
-export function SiteShell({ children }: { children: React.ReactNode }) {
+export function SiteShell({ children, initialItems }: { children: React.ReactNode; initialItems?: PortfolioItem[] }) {
   const pathname = usePathname()
   const bypass = usePreviewBypass()
   const settings = useSiteSettings()
@@ -42,13 +44,13 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   if (comingSoon && !bypass) return <ComingSoon />
 
   return (
-    <div className="flex min-h-[100dvh] flex-col">
-      <SiteHeader />
+    <div className={`flex min-h-[100dvh] flex-col ${pathname === '/contact' || pathname === '/about' || pathname === '/work' || pathname.startsWith('/work/') ? PORTFOLIO_THEME : ''}`}>
+      <SiteHeader initialItems={initialItems} />
       {/* Шапка зафиксирована и вынута из потока. На главной под ней сразу
           начинается герой во весь экран, на остальных страницах место под неё
           нужно освободить. */}
-      <main className={pathname === '/' ? 'flex-1' : 'flex-1 pt-16'}>{children}</main>
-      <SiteFooter />
+      <main className={pathname === '/' || pathname === '/about' || pathname === '/contact' ? 'flex-1' : 'flex-1 pt-16'}>{children}</main>
+      {pathname !== '/' && <SiteFooter />}
     </div>
   )
 }

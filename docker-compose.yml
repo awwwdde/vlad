@@ -40,7 +40,7 @@ services:
       context: ./back
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
+    environment: &panel_environment
       BASE_DOMAIN: ${BASE_DOMAIN:-awwwdde.art}
       DATABASE_URL: ${DATABASE_URL:-postgresql://awwwdde:${PANEL_DB_PASSWORD}@panel_db:5432/awwwdde}
       CADDY_ADMIN_URL: http://caddy:2019
@@ -52,7 +52,7 @@ services:
       API_TOKEN: ${API_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
       ENV_ENCRYPTION_KEY: ${ENV_ENCRYPTION_KEY}
-    volumes:
+    volumes: &panel_volumes
       # Управление контейнерами хоста.
       - /var/run/docker.sock:/var/run/docker.sock
       # Исходники гостей переживают пересборку панели.
@@ -62,8 +62,28 @@ services:
       - ./front/src/locales:/app/locales:ro
       # Картинки портфолио. Отдельный том: они переживают пересборку образа.
       - panel_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
       panel_db:
+        condition: service_healthy
+    networks:
+      - awwwdde_net
+
+  deploy_worker:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    command: ["python", "deploy_worker.py"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment: *panel_environment
+    volumes: *panel_volumes
+    depends_on:
+      panel:
         condition: service_healthy
     networks:
       - awwwdde_net

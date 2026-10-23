@@ -1,203 +1,105 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowRight, ArrowUpRight } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowUpRight } from '@phosphor-icons/react'
 import type { PortfolioItem } from '@/admin/types'
-import { useBundle, usePortfolio, usePortfolioItem } from '@/hooks/usePortfolio'
+import { useBundle, usePortfolio } from '@/hooks/usePortfolio'
 import { ButtonLink } from '@/components/Button'
-import { Carousel } from '@/components/Carousel'
-import { FlowerField } from '@/components/FlowerField'
-import { Reveal } from '@/components/Reveal'
-import { RevealWords } from '@/components/hero/RevealText'
-import { placeholder, projectImages } from '@/lib/projectImage'
+import { AsciiHoverText } from '@/components/AsciiHoverText'
+import { Logo } from '@/components/Logo'
+import { projectImage, projectImages } from '@/lib/projectImage'
+import { AsciiProjectCover } from '@/components/work/AsciiProjectCover'
+import { CaseStory } from '@/components/work/CaseStory'
 
-/**
- * Страница одной работы.
- *
- * Раскладка та же, что на главной: поля в 100px, волосяные линии вместо
- * рамок, разброс блоков по сетке. Страница проекта не должна выглядеть
- * приложением к сайту.
- *
- * Порядок блоков отвечает порядку вопросов: что это (заголовок и слоган),
- * как выглядит (карусель), что внутри (описание и состав работ), куда
- * дальше (соседние проекты). Кнопка на живой сайт стоит дважды - у карусели
- * и в конце: до первой доходят не все, а после просмотра хотят открыть.
- */
-interface Props {
-  slug: string
-  initialItems?: PortfolioItem[]
-}
-
-export default function ProjectDetail({ slug, initialItems }: Props) {
+export default function ProjectDetail({ slug, initialItems }: { slug: string; initialItems?: PortfolioItem[] }) {
   const { t } = useTranslation()
-
   const items = usePortfolio(initialItems)
-  const item = usePortfolioItem(slug, initialItems)
+  const index = items.findIndex(project => project.slug === slug)
+  const item = items[index] ?? null
+  const next = items.length > 1 && index >= 0 ? items[(index + 1) % items.length] : null
+  const previous = index > 0 ? items[index - 1] : null
+  const b = useBundle(item), nextBundle = useBundle(next)
 
-  // Хуки вызываются до ранних return-ов (правила хуков).
-  const idx = item ? items.findIndex(i => i.slug === item.slug) : -1
-  const prev = items.length > 1 && idx > 0 ? items[idx - 1] : null
-  const next = items.length > 1 && idx >= 0 ? items[(idx + 1) % items.length] : null
-  const b = useBundle(item)
-  const nextBundle = useBundle(next)
-  const prevBundle = useBundle(prev)
+  if (!item || !b) return <div className="mx-auto max-w-[1920px] px-[6.8%] py-24">
+    <h1 className="text-4xl tracking-tight">{t('project.not_found')}</h1>
+    <Link href="/work" className="mt-8 inline-flex items-center gap-2 text-muted"><ArrowLeft size={16} />{t('project.back')}</Link>
+  </div>
 
-  if (!item || !b) {
-    return (
-      <div className="mx-auto w-full max-w-[1920px] px-5 py-32 md:px-[100px]">
-        <p className="text-[19px] text-muted">{t('project.not_found')}</p>
-        <Link href="/work" className="mt-4 inline-flex items-center gap-2 text-[15px] text-accent">
-          <ArrowLeft size={16} />
-          {t('project.back')}
-        </Link>
-      </div>
-    )
-  }
+  const images = projectImages(item)
+  const cover = images[0]
+  const gallery = images.slice(1)
+  const facts = ([['client', b.client], ['year', b.year], ['role', b.role], ['duration', b.duration]] as const).filter(([, value]) => value?.trim())
 
-  const gallery = projectImages(item)
-  const shots = gallery.length ? gallery : [placeholder(item.slug, 1600, 1000)]
-
-  return (
-    <article className="relative overflow-hidden">
-      <FlowerField seed={3311} count={10} />
-
-      <div className="relative mx-auto w-full max-w-[1920px] px-5 pb-24 pt-10 md:px-[100px] md:pb-32 md:pt-14">
-        <Link
-          href="/work"
-          className="group inline-flex items-center gap-2 font-ui text-[14px] text-muted transition-colors duration-200 hover:text-fg"
-        >
-          <ArrowLeft
-            size={15}
-            className="transition-transform duration-200 group-hover:-translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
-          />
-          {t('project.back')}
-        </Link>
-
-        {/* ── Заголовок ─────────────────────────────────────────────────── */}
-        <div className="mt-10 grid grid-cols-1 gap-y-8 md:grid-cols-12 md:gap-x-8">
-          <h1 className="max-w-[13ch] text-[clamp(38px,6.4vw,92px)] font-semibold leading-[0.98] tracking-[-0.035em] md:col-span-7">
-            <RevealWords text={b.title} />
-          </h1>
-
-          <Reveal delay={0.12} className="md:col-span-4 md:col-start-9 md:mt-[1.2rem]">
-            <p className="max-w-prose text-[18px] leading-snug text-muted md:text-[21px]">
-              {b.tagline}
-            </p>
-            {/* Позиция в списке — дешёвый, но настоящий контекст: видно,
-                что работ несколько и эта не единственная. */}
-            {idx >= 0 && items.length > 1 && (
-              <p className="mt-5 font-ui text-[13px] tabular-nums text-muted">
-                {t('project.position', {
-                  n: String(idx + 1).padStart(2, '0'),
-                  total: String(items.length).padStart(2, '0'),
-                })}
-              </p>
-            )}
-          </Reveal>
-        </div>
-
-        {/* ── Карусель ──────────────────────────────────────────────────── */}
-        <div className="mt-12 md:mt-16">
-          <Carousel images={shots} alt={b.title} />
-          {gallery.length === 0 && (
-            <p className="mt-3 font-ui text-[12px] text-muted">{t('project.no_image')}</p>
-          )}
-        </div>
-
-        {/* ── Содержание ────────────────────────────────────────────────── */}
-        <div className="mt-16 grid grid-cols-1 gap-y-12 md:mt-24 md:grid-cols-12 md:gap-x-8 md:gap-y-0">
-          <Reveal className="md:col-span-6 md:col-start-1">
-            <h2 className="font-ui text-[13px] font-medium tracking-tight text-muted">
-              {t('project.overview')}
-            </h2>
-            <p className="mt-5 max-w-prose text-[17px] leading-relaxed md:text-[19px]">
-              {b.desc}
-            </p>
-          </Reveal>
-
-          <Reveal delay={0.08} className="md:col-span-4 md:col-start-8 md:mt-16">
-            <h2 className="font-ui text-[13px] font-medium tracking-tight text-muted">
-              {t('project.stack')}
-            </h2>
-            {/* Состав работ списком, а не плашками: плашки на сайте уже
-                заняты, а список из четырёх строк читается быстрее россыпи. */}
-            <ul className="mt-4 flex flex-col">
-              {b.tags.map(tag => (
-                <li key={tag} className="border-t border-line py-2.5 text-[17px] tracking-tight">
-                  {tag}
-                </li>
-              ))}
-            </ul>
-
-            {item.link && (
-              <div className="mt-8">
-                <ButtonLink href={item.link} external variant="ghost">
-                  {t('project.visit')}
-                  <ArrowUpRight size={16} />
-                </ButtonLink>
-              </div>
-            )}
-          </Reveal>
+  return <article className="mx-auto w-full max-w-[1920px] px-[6.8%] pb-16 pt-10 max-[750px]:px-[6%] md:pb-24 md:pt-16" data-project-detail>
+    <header>
+      <Link href="/work" className="inline-flex min-h-11 items-center gap-2 text-sm text-muted transition-colors hover:text-fg"><ArrowLeft size={16} aria-hidden />{t('project.back')}</Link>
+      <div className="mt-9 grid items-end gap-8 lg:mt-12 lg:grid-cols-[1.5fr_1fr] lg:gap-[8%]">
+        <h1 className="min-w-0 break-words text-[clamp(48px,7.7vw,124px)] font-semibold leading-[.98] tracking-[-.055em]">
+          <AsciiHoverText key={slug} text={b.title} secret={t('project.secret')} description={t('work.hover_hint')} />
+        </h1>
+        <div className="lg:pb-1">
+          <p className="max-w-[28ch] text-[clamp(20px,2.1vw,32px)] leading-[1.2] tracking-[-.025em] text-muted">{b.tagline}</p>
+          {item.link && <ButtonLink href={item.link} external variant="ghost" className="mt-7 border-fg/20">{t('project.live')}<ArrowUpRight size={17} aria-hidden /></ButtonLink>}
         </div>
       </div>
+      {facts.length > 0 && <dl className="mt-12 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-fg/15 pt-6 lg:mt-16 lg:grid-cols-4">{facts.map(([key, value]) => <div key={key}><dt className="text-sm text-muted">{t(`project.${key}`)}</dt><dd className="mt-3 whitespace-pre-line text-base leading-relaxed md:text-lg">{value}</dd></div>)}</dl>}
+    </header>
 
-      {/* ── Соседние работы ─────────────────────────────────────────────── */}
-      {(prev || next) && (
-        <nav className="relative border-t border-line">
-          <div className="mx-auto grid w-full max-w-[1920px] grid-cols-1 gap-y-8 px-5 py-14 md:grid-cols-2 md:gap-x-8 md:px-[100px] md:py-20">
-            {prev && prevBundle ? (
-              <NeighbourLink
-                href={`/work/${prev.slug}`}
-                label={t('project.prev')}
-                title={prevBundle.title}
-                side="prev"
-              />
-            ) : (
-              <span />
-            )}
-            {next && nextBundle && (
-              <NeighbourLink
-                href={`/work/${next.slug}`}
-                label={t('project.next')}
-                title={nextBundle.title}
-                side="next"
-              />
-            )}
-          </div>
-        </nav>
-      )}
-    </article>
-  )
-}
+    <figure className="mt-12 md:mt-20">
+      <div className="relative aspect-[16/10] overflow-hidden bg-surface md:aspect-[16/9]">
+        {cover ? <Image src={cover} alt={b.gallery_captions?.[0]?.trim() || b.title} fill priority sizes="(max-width: 1920px) 87vw, 1660px" className="object-cover" /> : <AsciiProjectCover seed={item.slug} />}
+      </div>
+      {images.length === 0 && <figcaption className="mt-3 text-xs text-muted">{t('project.no_image')}</figcaption>}
+      {cover && b.gallery_captions?.[0]?.trim() && <figcaption className="mt-4 text-sm text-muted">{b.gallery_captions[0]}</figcaption>}
+    </figure>
 
-function NeighbourLink({
-  href, label, title, side,
-}: { href: string; label: string; title: string; side: 'prev' | 'next' }) {
-  const Icon = side === 'prev' ? ArrowLeft : ArrowRight
-  return (
-    <Link
-      href={href}
-      className={`group flex items-center gap-5 ${side === 'next' ? 'md:justify-end md:text-right' : ''}`}
-    >
-      {side === 'prev' && (
-        <Icon
-          size={22}
-          className="shrink-0 text-muted transition-[transform,color] duration-200 group-hover:-translate-x-1 group-hover:text-accent motion-reduce:transition-none"
-        />
-      )}
-      <span>
-        <span className="block font-ui text-[13px] text-muted">{label}</span>
-        <span className="mt-1 block text-[clamp(22px,3vw,38px)] font-semibold tracking-[-0.03em] transition-colors duration-200 group-hover:text-accent">
-          {title}
-        </span>
-      </span>
-      {side === 'next' && (
-        <Icon
-          size={22}
-          className="shrink-0 text-muted transition-[transform,color] duration-200 group-hover:translate-x-1 group-hover:text-accent motion-reduce:transition-none"
-        />
-      )}
-    </Link>
-  )
+    <section className="mt-16 grid gap-10 border-t border-fg/15 pt-8 md:mt-24 md:grid-cols-[1.5fr_1fr] md:gap-[8%] md:pt-10" aria-labelledby="project-overview">
+      <div>
+        <h2 id="project-overview" className="mb-6 text-sm text-muted">{t('project.overview')}</h2>
+        {b.desc && <div className="max-w-[34ch] whitespace-pre-line text-[clamp(22px,2.55vw,38px)] leading-[1.3] tracking-[-.03em]">{b.desc}</div>}
+      </div>
+      {b.tags.length > 0 && <div>
+        <h2 className="mb-6 text-sm text-muted">{t('project.stack')}</h2>
+        <ul>{b.tags.map(tag => <li key={tag} className="border-t border-fg/15 py-4 text-lg tracking-tight first:border-t-0 first:pt-0 md:text-xl">{tag}</li>)}</ul>
+      </div>}
+    </section>
+
+    <CaseStory bundle={b}>
+      {gallery.length > 0 && <section className="mt-16 md:mt-24" aria-labelledby="project-gallery">
+      <h2 id="project-gallery" className="mb-7 text-sm text-muted">{t('project.details')}</h2>
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2 md:gap-[50px]">
+        {gallery.map((src, i) => <figure key={`${src}-${i}`} className={i % 3 === 0 ? 'md:col-span-2' : ''}>
+          <Image src={src} alt={b.gallery_captions?.[i + 1]?.trim() || t('project.image_alt', { title: b.title, n: i + 2 })} width={1600} height={1000} sizes={i % 3 === 0 ? '87vw' : '(max-width: 768px) 87vw, 42vw'} className="h-auto w-full bg-surface" />
+          {b.gallery_captions?.[i + 1]?.trim() && <figcaption className="mt-4 text-sm leading-relaxed text-muted">{b.gallery_captions[i + 1]}</figcaption>}
+        </figure>)}
+      </div>
+    </section>}
+    </CaseStory>
+
+
+
+    <section className="mt-20 flex flex-col items-start justify-between gap-7 border-t border-fg/15 pt-9 md:mt-28 md:flex-row md:items-center" aria-labelledby="project-discuss">
+      <h2 id="project-discuss" className="max-w-[19ch] text-[clamp(30px,3.6vw,54px)] font-medium leading-[1.08] tracking-[-.04em]">{t('project.discuss')}</h2>
+      <ButtonLink href="/contact">{t('common.cta_contact')}<ArrowUpRight size={17} aria-hidden /></ButtonLink>
+    </section>
+
+    {next && nextBundle && <nav className="mt-20 border-t border-fg/15 pt-9 md:mt-28" aria-label={t('project.more')}>
+      <Link href={`/work/${next.slug}`} className="group grid items-center gap-8 md:grid-cols-[1fr_1fr] md:gap-[8%]" data-project-next>
+        <div>
+          <span className="text-sm text-muted">{t('project.next')}</span>
+          <h2 className="mt-5 flex items-start gap-5 text-[clamp(36px,5.7vw,88px)] font-semibold leading-[1.02] tracking-[-.045em] transition-colors group-hover:text-accent">{nextBundle.title}<ArrowUpRight className="mt-[.08em] size-[.65em] shrink-0" aria-hidden /></h2>
+          <p className="mt-5 max-w-[30ch] text-base leading-relaxed text-muted">{nextBundle.tagline}</p>
+        </div>
+        <div className="relative aspect-[4/3] overflow-hidden bg-surface">
+          {projectImages(next).length > 0 ? <Image src={projectImage(next, 1000, 750)} alt={nextBundle.title} fill sizes="(max-width: 768px) 87vw, 42vw" className="object-cover transition-transform duration-500 ease-[cubic-bezier(.23,1,.32,1)] [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100" /> : <Logo className="absolute left-1/2 top-1/2 h-auto w-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" />}
+        </div>
+      </Link>
+      <div className="mt-9 flex flex-wrap justify-between gap-5 text-sm text-muted">
+        <Link href="/work" className="inline-flex min-h-11 items-center gap-2 hover:text-fg"><ArrowLeft size={16} aria-hidden />{t('project.back')}</Link>
+        {previous && <Link href={`/work/${previous.slug}`} className="inline-flex min-h-11 items-center gap-2 hover:text-fg">{t('project.prev')}<ArrowLeft size={16} aria-hidden /></Link>}
+      </div>
+    </nav>}
+  </article>
 }

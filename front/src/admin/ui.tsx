@@ -20,7 +20,7 @@ type ButtonVariant = 'primary' | 'ghost' | 'danger'
 
 const BUTTON_BASE =
   'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full ' +
-  'px-4 py-2 font-ui text-[13px] font-medium leading-none transition-colors duration-200 ' +
+  'min-h-11 px-5 py-2.5 font-ui text-sm font-medium leading-none transition-colors duration-150 ' +
   'disabled:pointer-events-none disabled:opacity-45 active:translate-y-px'
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
@@ -43,8 +43,9 @@ export function AdminButton({
   return (
     <button
       className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], className)}
-      disabled={rest.disabled || busy}
       {...rest}
+      disabled={rest.disabled || busy}
+      aria-busy={busy || undefined}
     >
       {busy ? '…' : children}
     </button>
@@ -74,9 +75,9 @@ export function Stat({
           : 'text-fg'
 
   return (
-    <div className="border-t border-line pt-4">
+    <div className="rounded-2xl border border-line bg-white/25 p-5">
       <div className="font-ui text-[12px] font-medium tracking-tight text-muted">{label}</div>
-      <div className={cn('mt-1.5 text-[26px] font-semibold tracking-tight tabular-nums', toneClass)}>
+      <div className={cn('mt-3 text-[clamp(30px,3vw,46px)] font-medium tracking-tight tabular-nums', toneClass)}>
         {value}
       </div>
       {hint && <div className="mt-0.5 font-ui text-[12px] text-muted">{hint}</div>}
@@ -120,7 +121,7 @@ export function StatusBadge({
 // ── Поле формы ───────────────────────────────────────────────────────────────
 
 export const INPUT_CLASS =
-  'w-full border border-line bg-bg px-3 py-2.5 font-ui text-[14px] text-fg ' +
+  'w-full min-h-12 rounded-xl border border-fg/20 bg-white/25 px-4 py-3 font-ui text-[16px] text-fg ' +
   'placeholder:text-muted/70 transition-colors duration-200 ' +
   'hover:border-muted/60 focus:border-fg focus:outline-none'
 
@@ -135,7 +136,7 @@ export function Field({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="font-ui text-[13px] font-medium text-fg">{label}</span>
+      <span className="font-ui text-sm font-medium text-fg">{label}</span>
       {children}
       {hint && <span className="font-ui text-[12px] text-muted">{hint}</span>}
     </label>
@@ -146,7 +147,7 @@ export function Field({
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="border border-danger/40 px-4 py-3 font-ui text-[13px] text-danger">
+    <p role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 font-ui text-sm text-danger">
       {children}
     </p>
   )
@@ -166,8 +167,8 @@ export function PageHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
       <div>
-        <h1 className="text-[28px] font-semibold tracking-[-0.03em]">{title}</h1>
-        {subtitle && <p className="mt-1.5 max-w-prose text-[14px] text-muted">{subtitle}</p>}
+        <h1 className="text-[clamp(36px,4vw,64px)] font-medium leading-[1.05] tracking-[-0.05em]">{title}</h1>
+        {subtitle && <p className="mt-4 max-w-prose text-[15px] leading-relaxed text-muted">{subtitle}</p>}
       </div>
       {action}
     </header>

@@ -7,6 +7,7 @@ import { api, ApiError } from '@/admin/api'
 import type { MetricsOverview, Project } from '@/admin/types'
 import { bytes, percent } from '@/admin/charts/format'
 import { ErrorNote, PageHeader, Stat, StatusBadge } from '@/admin/ui'
+import { ServerDiagnostics } from './ServerDiagnostics'
 import { STATUS_META } from './projectStatus'
 
 // Тоже самое имя канала и того же ключа, что и в front public (useSiteSettings).
@@ -20,16 +21,29 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [load, setLoad] = useState<MetricsOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [metricsError, setMetricsError] = useState(false)
 
   useEffect(() => {
-    api<Project[]>('/api/projects')
-      .then(setProjects)
-      .catch(e => setError(String(e.message ?? e)))
-    // Сводка нагрузки живёт отдельным запросом: если сборщик метрик ещё не
-    // накопил данных, дашборд всё равно должен показать список стендов.
-    api<MetricsOverview>('/api/metrics/overview')
-      .then(setLoad)
-      .catch(() => setLoad(null))
+    let cancelled = false, pending = false
+    const controller = new AbortController()
+    const reload = async () => {
+      if (pending || document.hidden) return
+      pending = true
+      const [sites, metrics] = await Promise.allSettled([
+        api<Project[]>('/api/projects', { signal: controller.signal }),
+        api<MetricsOverview>('/api/metrics/overview', { signal: controller.signal }),
+      ])
+      pending = false
+      if (cancelled) return
+      if (sites.status === 'fulfilled') { setProjects(sites.value); setError(null) }
+      else setError(sites.reason instanceof Error ? sites.reason.message : String(sites.reason))
+      if (metrics.status === 'fulfilled') { setLoad(metrics.value); setMetricsError(false) }
+      else { setLoad(null); setMetricsError(true) }
+    }
+    void reload()
+    const timer = window.setInterval(reload, 15000)
+    document.addEventListener('visibilitychange', reload)
+    return () => { cancelled = true; controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', reload) }
   }, [])
 
   const attention = (load?.projects ?? []).filter(p => p.attention)
@@ -41,6 +55,15 @@ export default function Dashboard() {
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <ComingSoonToggle />
+      <ServerDiagnostics />
+      <div className="grid gap-4 md:grid-cols-3">{[
+        ['/content', 'Тексты RU / EN', 'Главная, About, контакты, списки инструментов и пасхалки.'],
+        ['/settings', 'Настройки сайта', 'Ссылки, почта, ASCII-фоны и сведения для формы обращений.'],
+        ['/portfolio', 'Работы портфолио', 'Обложки, галереи, описания и порядок проектов.'],
+      ].map(([to, title, description]) => <Link key={to} to={to} className="rounded-2xl border border-line p-5 transition-colors hover:bg-white/30"><span className="block text-lg font-medium tracking-tight">{title} ↗</span><span className="mt-2 block text-sm leading-relaxed text-muted">{description}</span></Link>)}</div>
+      {metricsError && <p role="status" className="text-sm text-warning">Метрики недоступны. Состояние ресурсов не подтверждено; список сайтов загружается отдельно.</p>}
+
+      {load?.warning && <p role="status" className="rounded-xl border border-warning/30 p-4 text-sm text-warning">{load.warning}</p>}
 
       {/* Четыре числа вместо шести счётчиков по статусам. Прежняя сетка
           отвечала на вопрос «сколько чего в каком состоянии», который никто
@@ -68,7 +91,7 @@ export default function Dashboard() {
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line py-3"
               >
                 <Link
-                  to="/projects"
+                  to={`/projects/${p.slug}`}
                   className="text-[16px] font-medium tracking-tight text-fg underline decoration-line underline-offset-4"
                 >
                   {p.slug}
@@ -97,8 +120,8 @@ export default function Dashboard() {
               className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line py-3"
             >
               <span>
-                <span className="text-[16px] font-medium tracking-tight text-fg">{p.slug}</span>
-                <span className="ml-3 font-ui text-[13px] text-muted">{p.domain}</span>
+                <Link to={`/projects/${p.slug}`} className="text-[16px] font-medium tracking-tight text-fg hover:underline">{p.slug}</Link>
+                <a href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" className="ml-3 break-all font-ui text-[13px] text-muted underline decoration-line underline-offset-4 hover:text-fg">{p.domain} ↗</a>
               </span>
               <StatusBadge
                 label={STATUS_META[p.status].label}

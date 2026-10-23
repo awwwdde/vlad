@@ -3,7 +3,7 @@ import Work from '@/views/Work'
 import { getPortfolio } from '@/lib/portfolio-server'
 
 export const metadata: Metadata = {
-  title: 'Работы',
+  title: 'Проекты',
   description: 'Коммерческие сайты, сервисы и внутренние панели за последние годы.',
 }
 

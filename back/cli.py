@@ -63,7 +63,7 @@ def deploy(
                 _die(r)
         console.print(f"[cyan]Деплой {slug}…[/cyan] (build может занять минуты)")
         r = c.post(f"/api/projects/{slug}/deploy", json={"source": source})
-        if r.status_code != 200:
+        if r.status_code != 202:
             _die(r)
         data = r.json()
         console.print(f"[green]OK[/green] {data.get('message')}")
@@ -121,26 +121,10 @@ def reconcile() -> None:
     Нужно после перезапуска Caddy: его маршруты живут в памяти, статический
     Caddyfile содержит только apex, поэтому при рестарте гостевые роуты слетают.
     Команда работает напрямую с БД и Caddy (минуя HTTP-панель)."""
-    from sqlalchemy import select
-
-    import caddy
-    from db import SessionLocal, init_db
-    from models import Project, ProjectStatus
-
+    from bootstrap import reconcile_caddy_routes
+    from db import init_db
     init_db()
-    restored = 0
-    with SessionLocal() as db:
-        projects = list(
-            db.scalars(select(Project).where(Project.status == ProjectStatus.running))
-        )
-        for p in projects:
-            try:
-                caddy.upsert_route(p.slug, domains=p.custom_domains or [])
-                console.print(f"[green]ok[/green] {p.slug}")
-                restored += 1
-            except Exception as e:  # noqa: BLE001
-                console.print(f"[red]fail[/red] {p.slug}: {e}")
-    console.print(f"восстановлено маршрутов: {restored}/{len(projects)}")
+    reconcile_caddy_routes()
 
 
 @app.command(name="rm")

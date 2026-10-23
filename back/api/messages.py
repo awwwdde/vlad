@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from models import ContactMessage
+from models import ContactConsent, SiteSetting
+from privacy import privacy_document, consent_error
 from schemas import ContactMessageIn
 from schemas import ContactMessageOut
 from schemas import MessagePatch
@@ -25,12 +27,27 @@ _CONTACT_LIMIT = 5
 _CONTACT_WINDOW_SEC = 600
 
 
+def current_privacy(db: Session) -> dict:
+    return privacy_document({row.key: row.value for row in db.scalars(
+        select(SiteSetting).where(SiteSetting.key.like("privacy_%"))
+    )})
+
+
+@router.get("/api/privacy")
+def privacy_public(db: Session = Depends(get_db)) -> dict:
+    return current_privacy(db)
+
+
 @router.post("/api/contact", response_model=dict, status_code=201)
 def contact_submit(
     payload: ContactMessageIn,
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
+    document = current_privacy(db)
+    error = consent_error(document, payload.consent, payload.consent_version)
+    if error:
+        raise HTTPException(status_code=error[0], detail=error[1])
     # Берём реальный IP с учётом Caddy (X-Forwarded-For ставит прокси).
     fwd = request.headers.get("x-forwarded-for", "")
     ip = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "")) or "unknown"
@@ -51,6 +68,8 @@ def contact_submit(
         user_agent=(request.headers.get("user-agent", "") or None)[:500] if request.headers.get("user-agent") else None,
     )
     db.add(msg)
+    db.flush()
+    db.add(ContactConsent(message_id=msg.id, version=document["version"], snapshot=document))
     db.commit()
     return {"ok": True}
 
@@ -105,6 +124,9 @@ def messages_delete(
     msg = db.get(ContactMessage, msg_id)
     if not msg:
         raise HTTPException(status_code=404, detail="не найдено")
+    # Consent evidence has the same lifecycle as the corresponding enquiry.
+    from sqlalchemy import delete
+    db.execute(delete(ContactConsent).where(ContactConsent.message_id == msg_id))
     db.delete(msg)
     db.commit()
     return {"ok": True}

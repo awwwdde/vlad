@@ -2,6 +2,7 @@
 
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { PORTFOLIO_THEME } from '@/lib/siteTheme'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -11,7 +12,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // редиректом на /login и обратно.
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-400">
+      <div className={`flex min-h-screen items-center justify-center ${PORTFOLIO_THEME}`}>
         Загрузка…
       </div>
     )

@@ -56,6 +56,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   }
 
   const res = await fetch(url.toString(), {
+    cache: 'no-store',
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -74,12 +75,17 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   const payload = isJson ? await res.json().catch(() => null) : await res.text()
 
   if (!res.ok) {
-    const detail =
-      (payload && typeof payload === 'object' && 'detail' in payload
-        ? String(payload.detail)
-        : typeof payload === 'string'
-        ? payload
-        : res.statusText) || 'Ошибка запроса'
+    const raw: unknown = payload && typeof payload === 'object' && 'detail' in payload ? payload.detail : payload
+    const detail = Array.isArray(raw)
+      ? raw.map(item => {
+          if (!item || typeof item !== 'object') return String(item)
+          const location = Array.isArray(item.loc) ? item.loc.filter((part: unknown) => part !== 'body').join('.') : ''
+          return `${location ? `${location}: ` : ''}${typeof item.msg === 'string' ? item.msg : 'Некорректное значение'}`
+        }).join('; ')
+      : typeof raw === 'string' && raw.trim() && !raw.trim().startsWith('<') ? raw : res.statusText || 'Ошибка запроса'
+    if (res.status >= 500 && (!isJson || !detail || detail === 'Internal Server Error')) {
+      throw new ApiError(res.status, `Ошибка сервера HTTP ${res.status} (${path}). Запрос не выполнен; для выкладки откройте «Консоль», для нагрузки проверьте доступность панели и Docker.`)
+    }
     throw new ApiError(res.status, detail)
   }
   return payload as T

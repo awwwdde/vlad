@@ -55,6 +55,10 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE metric_samples ADD COLUMN IF NOT EXISTS state VARCHAR(24)"))
+        conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS request_config JSONB NOT NULL DEFAULT '{}'::jsonb"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS deploy_config JSONB NOT NULL DEFAULT '{}'::jsonb"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS active_config JSONB NOT NULL DEFAULT '{}'::jsonb"))
         conn.execute(text(
             "ALTER TABLE projects ADD COLUMN IF NOT EXISTS secret_key VARCHAR(120)"
         ))

@@ -4,11 +4,14 @@ import { useTranslation } from 'react-i18next'
 import { ButtonLink } from '@/components/Button'
 import { LangSwitcher } from '@/components/LangSwitcher'
 import { Logo } from '@/components/Logo'
+import { useSiteSettings } from '@/hooks/useSiteSettings'
+import { contactEmail } from '@/lib/siteSettings'
 
 /** Заглушка публичного сайта. Включается флагом coming_soon в админке.
  *  Обход: `?preview` в адресе или вход в /admin (см. SiteShell). */
 export default function ComingSoon() {
   const { t } = useTranslation()
+  const email = contactEmail(useSiteSettings())
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
@@ -28,8 +31,8 @@ export default function ComingSoon() {
           {t('coming.body')}
         </p>
         <div className="mt-10">
-          <ButtonLink href={`mailto:${t('common.email')}`} external>
-            {t('common.email')}
+          <ButtonLink href={`mailto:${email}`} external>
+            {email}
           </ButtonLink>
         </div>
       </main>

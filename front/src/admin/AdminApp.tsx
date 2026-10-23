@@ -7,9 +7,11 @@ import AdminLayout from '@/views/admin/AdminLayout'
 import Login from '@/views/admin/Login'
 import Dashboard from '@/views/admin/Dashboard'
 import Projects from '@/views/admin/Projects'
+import SubsiteDetail from '@/views/admin/SubsiteDetail'
 import Portfolio from '@/views/admin/Portfolio'
 import Content from '@/views/admin/Content'
 import Messages from '@/views/admin/Messages'
+import SiteSettings from '@/views/admin/SiteSettings'
 
 // Корень всей админ-части. Next отдаёт один и тот же документ на любой
 // /admin/* (app/admin/[[...slug]]), а дальше маршрутизацию ведёт react-router
@@ -30,9 +32,11 @@ export default function AdminApp() {
           >
             <Route index element={<Dashboard />} />
             <Route path="projects" element={<Projects />} />
+            <Route path="projects/:slug" element={<SubsiteDetail />} />
             <Route path="portfolio" element={<Portfolio />} />
             <Route path="content" element={<Content />} />
             <Route path="messages" element={<Messages />} />
+            <Route path="settings" element={<SiteSettings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

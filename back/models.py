@@ -45,6 +45,8 @@ class Project(Base):
 
     # Источник кода: git-URL или путь, который положили в workspaces вручную.
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    deploy_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
+    active_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
 
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus), default=ProjectStatus.created, nullable=False
@@ -91,6 +93,12 @@ class Project(Base):
         return [self.domain, *(self.custom_domains or [])]
 
     @property
+    def upstream(self) -> str:
+        from config import settings
+        port = (self.active_config or {}).get('app_port') or settings.guest_app_port
+        return f"{self.app_container or self.slug + '_app'}:{port}"
+
+    @property
     def database_url(self) -> str:
         """DATABASE_URL, который прокидывается внутрь гостевого app-контейнера."""
         return (
@@ -118,6 +126,37 @@ class Project(Base):
         back_populates="project",
         lazy="selectin",
     )
+    deployments: Mapped[list['Deployment']] = relationship(cascade='all, delete-orphan', passive_deletes=True)
+
+
+class Deployment(Base):
+    __tablename__ = 'deployments'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    status: Mapped[str] = mapped_column(String(20), default='building')
+    stage: Mapped[str] = mapped_column(String(30), default='source')
+    revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Immutable request snapshot; encrypted env values never go to response schemas.
+    request_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
+
+
+class ServiceHeartbeat(Base):
+    __tablename__ = 'service_heartbeats'
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class DeploymentLog(Base):
+    __tablename__ = 'deployment_logs'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    deployment_id: Mapped[int] = mapped_column(ForeignKey('deployments.id', ondelete='CASCADE'), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    level: Mapped[str] = mapped_column(String(12), default='info')
+    stage: Mapped[str] = mapped_column(String(30))
+    message: Mapped[str] = mapped_column(Text)
 
 
 class ProjectEnvVar(Base):
@@ -172,7 +211,7 @@ class PortfolioItem(Base):
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     accent: Mapped[str | None] = mapped_column(String(20), nullable=True)  # hex
 
-    # Языковые бандлы: {title, tagline, desc, tags: [str]}.
+    # Языковые бандлы: базовые тексты + задача, решение, этапы и результат кейса.
     ru: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     en: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
@@ -209,6 +248,16 @@ class ContactMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+
+class ContactConsent(Base):
+    """Exact legal text accepted for an enquiry, committed atomically with it."""
+    __tablename__ = "contact_consents"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("contact_messages.id", ondelete="CASCADE"), unique=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SiteSetting(Base):
@@ -276,6 +325,7 @@ class MetricSample(Base):
     )
     #: "app" или "db" - у проекта два контейнера, и нагрузка у них разная.
     container: Mapped[str] = mapped_column(String(16))
+    state: Mapped[str | None] = mapped_column(String(24), nullable=True)
 
     taken_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

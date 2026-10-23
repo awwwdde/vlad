@@ -5,9 +5,10 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from models import ProjectStatus
+from deploy_options import DeployOptions
 
 # slug: 1–40 символов, латиница/цифры/дефис, не с дефиса (поддомен DNS-safe).
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
@@ -17,6 +18,7 @@ class ProjectCreate(BaseModel):
     slug: str
     title: str | None = None
     source: str | None = None  # git-URL или путь в workspaces
+    deploy_config: DeployOptions = Field(default_factory=DeployOptions)
 
     @field_validator("slug")
     @classmethod
@@ -37,12 +39,49 @@ class ProjectOut(BaseModel):
     slug: str
     title: str | None
     source: str | None
+    deploy_config: DeployOptions = Field(default_factory=DeployOptions)
+    active_config: dict = Field(default_factory=dict)
+    app_container: str | None = None
+    image_tag: str | None = None
     status: ProjectStatus
     last_error: str | None
     domain: str
     custom_domains: list[str] = []
     created_at: datetime
     deployed_at: datetime | None
+
+
+class ProjectSettingsIn(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    source: str | None = Field(default=None, max_length=500)
+    deploy_config: DeployOptions = Field(default_factory=DeployOptions)
+
+
+class DeploymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    status: str
+    stage: str
+    revision: str | None
+    error: str | None
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class DeploymentLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    at: datetime
+    level: str
+    stage: str
+    message: str
+
+
+class DeploymentLogsOut(BaseModel):
+    deployment: DeploymentOut
+    lines: list[DeploymentLogOut]
+    next_cursor: int
+    has_more: bool
 
 
 # Домен: ASCII-хост (для кириллических доменов — punycode/xn--). 1–253 символа,
@@ -110,6 +149,11 @@ LoginResponse.model_rebuild()
 
 # ── Портфолио (контент главного сайта) ───────────────────────────────────────
 
+class CaseStep(BaseModel):
+    title: str = Field(default="", max_length=300)
+    body: str = Field(default="", max_length=10000)
+
+
 class I18nBundle(BaseModel):
     """Языковой бандл одного элемента портфолио."""
 
@@ -117,6 +161,16 @@ class I18nBundle(BaseModel):
     tagline: str = ""
     desc: str = ""
     tags: list[str] = []
+    client: str = Field(default="", max_length=300)
+    year: str = Field(default="", max_length=100)
+    role: str = Field(default="", max_length=500)
+    duration: str = Field(default="", max_length=300)
+    challenge: str = Field(default="", max_length=20000)
+    approach: str = Field(default="", max_length=20000)
+    outcome: str = Field(default="", max_length=20000)
+    deliverables: list[str] = Field(default_factory=list, max_length=40)
+    steps: list[CaseStep] = Field(default_factory=list, max_length=20)
+    gallery_captions: list[str] = Field(default_factory=list, max_length=40)
 
 
 class PortfolioItemIn(BaseModel):
@@ -204,6 +258,8 @@ class ContactMessageIn(BaseModel):
     message: str | None = None
     budget: str | None = None
     source: str = "home"  # "home" | "about" | др.
+    consent: StrictBool = False
+    consent_version: str = ""
 
     @field_validator("email")
     @classmethod
@@ -332,6 +388,8 @@ class MetricSeries(BaseModel):
 
 
 class MetricsOut(BaseModel):
+    last_sample_at: datetime | None = None
+    warning: str | None = None
     slug: str
     range: str
     #: raw - сырые замеры, hourly - часовые срезы. Фронт по этому полю решает,
@@ -351,6 +409,7 @@ class HealthEventOut(BaseModel):
 
 
 class ProjectHealthOut(BaseModel):
+    warning: str | None = None
     slug: str
     state: str | None = None
     restarts: int = 0
@@ -366,8 +425,9 @@ class ProjectLoadOut(BaseModel):
     slug: str
     title: str | None = None
     status: ProjectStatus
-    cpu_percent: float = 0.0
-    mem_bytes: int = 0
+    cpu_percent: float | None = None
+    mem_bytes: int | None = None
+    last_sample_at: datetime | None = None
     state: str | None = None
     restarts: int = 0
     #: Причина попадания в «требует внимания». None - проект в порядке.
@@ -375,11 +435,12 @@ class ProjectLoadOut(BaseModel):
 
 
 class OverviewOut(BaseModel):
+    warning: str | None = None
     at: datetime
     projects_total: int
     projects_running: int
-    cpu_percent_total: float
-    mem_bytes_total: int
+    cpu_percent_total: float | None
+    mem_bytes_total: int | None
     projects: list[ProjectLoadOut]
 
 

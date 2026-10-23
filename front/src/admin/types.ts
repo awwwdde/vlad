@@ -20,6 +20,54 @@ export interface Project {
   custom_domains: string[]
   created_at: string
   deployed_at: string | null
+  active_config?: Partial<DeployOptions>
+  app_container?: string | null
+  image_tag?: string | null
+  deploy_config?: DeployOptions
+}
+
+export interface DeployOptions {
+  git_branch: string
+  context_dir: string
+  dockerfile: string
+  app_port: number | null
+  health_path: string
+  health_timeout: number
+  health_interval: number
+  health_status: number
+  memory_mb: number | null
+  cpus: number | null
+  pids_limit: number | null
+  restart_policy: 'unless-stopped' | 'on-failure' | 'no'
+  start_command: string[]
+  no_cache: boolean
+  pull_base_image: boolean
+  database_enabled: boolean
+}
+
+export interface Deployment {
+  id: number
+  status: string
+  stage: string
+  revision: string | null
+  error: string | null
+  started_at: string
+  finished_at: string | null
+}
+
+export interface DeploymentLog {
+  id: number
+  at: string
+  level: string
+  stage: string
+  message: string
+}
+
+export interface DeploymentLogPage {
+  deployment: Deployment
+  lines: DeploymentLog[]
+  next_cursor: number
+  has_more: boolean
 }
 
 export interface ActionResult {
@@ -47,6 +95,16 @@ export interface I18nBundle {
   tagline: string
   desc: string
   tags: string[]
+  client?: string
+  year?: string
+  role?: string
+  duration?: string
+  challenge?: string
+  approach?: string
+  outcome?: string
+  deliverables?: string[]
+  steps?: { title: string; body: string }[]
+  gallery_captions?: string[]
 }
 
 export interface PortfolioItem {
@@ -122,6 +180,8 @@ export interface MetricSeries {
 }
 
 export interface Metrics {
+  warning?: string | null
+  last_sample_at?: string | null
   slug: string
   range: MetricRange
   resolution: 'raw' | 'hourly'
@@ -136,6 +196,7 @@ export interface HealthEvent {
 }
 
 export interface ProjectHealth {
+  warning?: string | null
   slug: string
   state: string | null
   restarts: number
@@ -148,8 +209,9 @@ export interface ProjectLoad {
   slug: string
   title: string | null
   status: ProjectStatus
-  cpu_percent: number
-  mem_bytes: number
+  cpu_percent: number | null
+  mem_bytes: number | null
+  last_sample_at?: string | null
   state: string | null
   restarts: number
   /** Причина попадания в «требует внимания»; null — стенд в порядке. */
@@ -157,10 +219,11 @@ export interface ProjectLoad {
 }
 
 export interface MetricsOverview {
+  warning?: string | null
   at: string
   projects_total: number
   projects_running: number
-  cpu_percent_total: number
-  mem_bytes_total: number
+  cpu_percent_total: number | null
+  mem_bytes_total: number | null
   projects: ProjectLoad[]
 }

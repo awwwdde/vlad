@@ -13,3 +13,7 @@ services:
       - "8010:8000"
     environment:
       BASE_DOMAIN: localhost
+
+  deploy_worker:
+    environment:
+      BASE_DOMAIN: localhost

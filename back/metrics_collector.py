@@ -69,7 +69,11 @@ def collect_once(db: Session) -> int:
         app_restarts = 0
 
         for kind in CONTAINERS:
+            if kind == 'db' and not (proj.active_config or {}).get('database_enabled', True):
+                continue
             name = f"{proj.slug}_{kind}"
+            if kind == 'app':
+                name = proj.app_container or name
             try:
                 stats = engine.container_stats(name)
             except Exception as exc:  # noqa: BLE001
@@ -77,12 +81,17 @@ def collect_once(db: Session) -> int:
                 print(f"[metrics] {name}: {exc}")
                 continue
             if stats is None:
+                db.add(MetricSample(project_id=proj.id, container=kind, state='missing'))
+                written += 1
+                if kind == 'app':
+                    app_state = 'missing'
                 continue
 
             db.add(
                 MetricSample(
                     project_id=proj.id,
                     container=kind,
+                    state=stats.state,
                     cpu_percent=stats.cpu_percent,
                     mem_bytes=stats.mem_bytes,
                     mem_limit_bytes=stats.mem_limit_bytes,

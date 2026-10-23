@@ -11,13 +11,13 @@
  */
 export const SECTION_LABELS: Record<string, { title: string; hint: string }> = {
   nav: { title: 'Навигация', hint: 'Пункты меню в шапке' },
-  common: { title: 'Общее', hint: 'Кнопки и почта, повторяющиеся по всему сайту' },
+  common: { title: 'Общее', hint: 'Общие кнопки; почта и ссылки — в настройках сайта' },
   home: { title: 'Главная', hint: 'Все секции первой страницы' },
   work: { title: 'Работы', hint: 'Страница со списком проектов' },
-  project: { title: 'Карточка проекта', hint: 'Страница одной работы' },
-  about: { title: 'Обо мне', hint: 'Страница с биографией' },
+  project: { title: 'Страница кейса', hint: 'Общие подписи блоков. Содержание каждого кейса — в разделе «Портфолио».' },
+  about: { title: 'About', hint: 'Название, подход, инструменты и текущая работа' },
   contact: { title: 'Контакт', hint: 'Страница с формой и её ошибки' },
-  footer: { title: 'Подвал', hint: 'Нижняя строка сайта' },
+  footer: { title: 'Футер', hint: 'Подписи ссылок; адреса — в настройках сайта' },
   coming: { title: 'Заглушка', hint: 'Экран, который видят при включённом режиме «скоро»' },
 }
 
@@ -63,6 +63,12 @@ const WORD: Record<string, string> = {
   loading: 'загрузка',
   empty: 'пусто',
   availability: 'занятость',
+  brand: 'имя на первом экране', hero: 'первый экран', role: 'роль', tools: 'инструменты',
+  interface: 'интерфейс', logic: 'логика', launch: 'запуск', headline: 'основной заголовок',
+  understand: 'разобраться', design: 'придумать', build: 'запустить', story: 'рассказ',
+  secret: 'пасхалка', hover: 'наведение', ascii: 'ASCII', list: 'список', items: 'элементы',
+  socials: 'соцсети', documents: 'документы', privacy: 'политика', consent: 'согласие',
+  projects: 'проекты', main: 'основная навигация', menu: 'меню', close: 'закрыть', contacts: 'контакты',
 }
 
 /**
@@ -73,6 +79,17 @@ const WORD: Record<string, string> = {
  * целым ключам пришлось бы дополнять при каждой новой строке на сайте.
  */
 export function humanizeKey(key: string): string {
+  const labels: Record<string, string> = {
+    client: 'Подпись клиента', year: 'Подпись года', duration: 'Подпись срока', thinking: 'Задача и решение', challenge: 'Заголовок задачи', approach: 'Заголовок решения', process: 'Заголовок этапов', outcome: 'Заголовок результата', deliverables: 'Заголовок списка сделанного',
+    now_action: 'Доступное название блока с котом', form_link: 'Кнопка перехода к форме', form_title: 'Заголовок перед формой',
+    page_label: 'Подпись первого экрана', manifest_line1: 'About: первая строка', manifest_line2: 'About: вторая строка', manifest_line3: 'About: третья строка', work_transition: 'Переход к работам в конце About',
+    sky_title1: 'Hero: первая строка', sky_title2: 'Hero: вторая строка', sky_title3: 'Hero: третья строка',
+    sky_intro: 'Hero: описание', sky_work: 'Hero: кнопка работ', sky_contact: 'Hero: кнопка связи',
+    read_more: 'Кнопка «Ближе познакомиться»', see_work: 'Кнопка просмотра работ',
+    body1: 'Биография: первый абзац', body2: 'Биография: второй абзац',
+    hover_hint: 'Подсказка взаимодействия с пасхалкой', secret: 'Скрытая фраза пасхалки',
+  }
+  if (labels[key]) return labels[key]
   const parts = key.split('_')
   const words = parts.map(p => WORD[p] ?? p)
   return words.join(' · ')

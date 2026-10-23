@@ -12,10 +12,12 @@ export function ProjectCard({
   item,
   priority = false,
   className,
+  sizes = '(max-width: 768px) 100vw, 50vw',
 }: {
   item: PortfolioItem
   priority?: boolean
   className?: string
+  sizes?: string
 }) {
   const b = useBundle(item)
   if (!b) return null
@@ -28,7 +30,7 @@ export function ProjectCard({
           alt={b.title}
           fill
           priority={priority}
-          sizes="(max-width: 768px) 100vw, 50vw"
+          sizes={sizes}
           className="object-cover transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         />
       </div>

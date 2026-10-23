@@ -5,7 +5,7 @@ import { api } from '@/admin/api'
 import type { MetricRange, Metrics, ProjectHealth } from '@/admin/types'
 import { TimeAreaChart } from '@/admin/charts/TimeAreaChart'
 import { ago, bytes, bytesPerSecond, percent, timeFull } from '@/admin/charts/format'
-import { Stat, StatusBadge } from '@/admin/ui'
+import { AdminButton, Stat, StatusBadge } from '@/admin/ui'
 import { cn } from '@/lib/cn'
 
 /**
@@ -35,37 +35,43 @@ export function ProjectLoad({ slug }: { slug: string }) {
   // пустотой, пока едут новые.
   const [data, setData] = useState<{
     key: string
-    metrics: Metrics
-    health: ProjectHealth
+    metrics: Metrics | null
+    health: ProjectHealth | null
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [refresh, setRefresh] = useState(0)
 
   const key = `${slug}|${range}`
   const loading = data?.key !== key
 
   useEffect(() => {
-    let cancelled = false
-
-    Promise.all([
-      api<Metrics>(`/api/projects/${slug}/metrics`, { query: { range } }),
-      api<ProjectHealth>(`/api/projects/${slug}/health`, { query: { range } }),
-    ])
-      .then(([m, h]) => {
-        if (cancelled) return
-        setData({ key: `${slug}|${range}`, metrics: m, health: h })
-        setError(null)
-      })
-      .catch(e => {
-        if (!cancelled) setError(e.message ?? String(e))
-      })
-
-    return () => {
-      cancelled = true
+    let cancelled = false, pending = false
+    const controller = new AbortController()
+    const load = async () => {
+      if (pending || document.hidden) return
+      pending = true
+      const result = await Promise.allSettled([
+        api<Metrics>(`/api/projects/${slug}/metrics`, { query: { range }, signal: controller.signal }),
+        api<ProjectHealth>(`/api/projects/${slug}/health`, { query: { range }, signal: controller.signal }),
+      ])
+      pending = false
+      if (cancelled) return
+      const [metrics, health] = result
+      setData(previous => ({ key: `${slug}|${range}`,
+        metrics: metrics.status === 'fulfilled' ? metrics.value : previous?.key === `${slug}|${range}` ? previous.metrics : null,
+        health: health.status === 'fulfilled' ? health.value : previous?.key === `${slug}|${range}` ? previous.health : null,
+      }))
+      const errors = result.flatMap((item, index) => item.status === 'rejected' ? [`${index === 0 ? 'Графики' : 'Состояние'}: ${item.reason instanceof Error ? item.reason.message : String(item.reason)}`] : [])
+      setError(errors.join(' · ') || null)
     }
-  }, [slug, range])
+    void load()
+    const timer = window.setInterval(load, 15000)
+    document.addEventListener('visibilitychange', load)
+    return () => { cancelled = true; controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', load) }
+  }, [slug, range, refresh])
 
-  const metrics = data?.metrics ?? null
-  const health = data?.health ?? null
+  const metrics = data?.key === key ? data.metrics : null
+  const health = data?.key === key ? data.health : null
   const step = metrics?.step_seconds ?? 60
   const series = metrics?.series ?? []
 
@@ -90,6 +96,7 @@ export function ProjectLoad({ slug }: { slug: string }) {
             {r.label}
           </button>
         ))}
+        <AdminButton onClick={() => setRefresh(value => value + 1)}>Обновить</AdminButton>
         {loading && <span className="font-ui text-[12px] text-muted">обновляю…</span>}
       </div>
 
@@ -99,6 +106,8 @@ export function ProjectLoad({ slug }: { slug: string }) {
         </p>
       )}
 
+      {Array.from(new Set([metrics?.warning, health?.warning].filter(Boolean))).map(warning => <p key={warning} role="status" className="rounded-xl border border-warning/30 p-4 text-sm leading-relaxed text-warning">{warning}</p>)}
+      <p className="text-xs text-muted">Обновление каждые 15 секунд. Последний замер: {metrics?.last_sample_at ? timeFull(metrics.last_sample_at) : 'пока нет данных'}.</p>
       <div className="grid grid-cols-2 gap-x-8 gap-y-4 md:grid-cols-4">
         <Stat
           label="Состояние"
@@ -125,7 +134,7 @@ export function ProjectLoad({ slug }: { slug: string }) {
         />
         <Stat
           label="Рестартов"
-          value={health?.restarts ?? 0}
+          value={health?.restarts ?? '—'}
           tone={(health?.restarts ?? 0) > 0 ? 'warning' : 'neutral'}
           hint={(health?.restarts ?? 0) > 0 ? 'циклический перезапуск?' : undefined}
         />
@@ -194,7 +203,7 @@ export function ProjectLoad({ slug }: { slug: string }) {
           </ul>
         ) : (
           <p className="mt-3 border-t border-line pt-3 font-ui text-[13px] text-muted">
-            За период состояние не менялось.
+            {health ? 'За период новых событий нет.' : 'События пока недоступны.'}
           </p>
         )}
       </div>

@@ -76,10 +76,13 @@ def upsert_route(
         existing = client.get(_id_url(slug))
         if existing.status_code == 200:
             r = client.patch(_id_url(slug), json=route)
-        else:
+        elif existing.status_code == 404:
             # Иначе — вставляем в начало списка routes сервера (приоритет
             # над catch-all заглушкой).
             r = client.post(_routes_prepend_url(), json=route)
+        else:
+            existing.raise_for_status()
+            raise RuntimeError('Неожиданный ответ Caddy при чтении маршрута')
         r.raise_for_status()
 
 

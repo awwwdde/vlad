@@ -1,27 +1,15 @@
-"""Движок деплоя гостевых проектов на docker-py.
+"""Docker operations used by the durable deployment worker.
 
-Один проект = два контейнера в общей сети awwwdde_net:
-    <slug>_db   — Postgres 16 (свой volume <slug>_db_data)
-    <slug>_app  — образ, собранный из Dockerfile гостя; слушает :8080
-
-Полный цикл deploy():
-    1. подготовить исходники (git clone / уже лежащая папка в workspaces);
-    2. docker build → образ awwwdde/<slug>:latest;
-    3. поднять (или переиспользовать) Postgres-контейнер гостя;
-    4. (пере)создать app-контейнер с DATABASE_URL на свой db;
-    5. дождаться, пока app начнёт отвечать на /healthz;
-    6. прописать маршрут в Caddy (<slug>.awwwdde.art → <slug>_app:8080).
-
-Гостевой контракт (что должен иметь проект, чтобы «заехать»):
-    • Dockerfile в корне исходников;
-    • app слушает порт 8080;
-    • миграции+seed на старте контейнера;
-    • эндпоинт GET /healthz, отвечающий 200, когда готов;
-    • БД берётся из переменной окружения DATABASE_URL.
+Each release gets a distinct image tag and candidate container. The worker
+checks that candidate before updating Caddy and active metadata. Legacy
+canonical names remain supported for already deployed sites and CLI actions.
+DeployOptions defines source/build/runtime/readiness settings.
 """
 from __future__ import annotations
 
 import secrets
+import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -33,6 +21,7 @@ import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 
 from config import settings
+from deploy_options import DeployOptions, build_paths
 
 _client: docker.DockerClient | None = None
 
@@ -76,7 +65,7 @@ def _remove_container(name: str) -> None:
         pass
 
 
-def prepare_source(slug: str, source: str | None) -> Path:
+def prepare_source(slug: str, source: str | None, options: DeployOptions | None = None, *, log=None) -> Path:
     """Положить исходники гостя в workspaces/<slug> и вернуть путь.
 
     source:
@@ -84,50 +73,133 @@ def prepare_source(slug: str, source: str | None) -> Path:
       • None — ожидаем, что папка workspaces/<slug> уже существует
         (например, её залили через CLI/scp).
     """
+    options = options or DeployOptions()
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}', slug):
+        raise DeployError('Некорректный slug исходников')
     ws = Path(settings.workspaces_dir).resolve()
     ws.mkdir(parents=True, exist_ok=True)
     dest = ws / slug
+    if dest.is_symlink() or dest.resolve().parent != ws:
+        raise DeployError('Workspace должен оставаться внутри каталога панели')
+    if source and (source.startswith('-') or any(ord(c) < 32 for c in source)):
+        raise DeployError('Некорректный источник кода')
 
     is_git = source and (
         source.startswith(("http://", "https://", "git@", "ssh://"))
         or source.endswith(".git")
     )
 
+    def git(args, timeout):
+        try:
+            result = subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout)
+            if log:
+                log((result.stdout or '') + (result.stderr or ''))
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if log:
+                output = (exc.stdout or b'') if isinstance(exc.stdout, bytes) else (exc.stdout or '')
+                errors = (exc.stderr or b'') if isinstance(exc.stderr, bytes) else (exc.stderr or '')
+                if isinstance(output, bytes): output = output.decode('utf-8', 'replace')
+                if isinstance(errors, bytes): errors = errors.decode('utf-8', 'replace')
+                log(output + errors)
+            raise DeployError('Git не смог получить исходники. Подробности — в консоли выкладки.') from exc
+
     if is_git:
         if (dest / ".git").exists():
-            subprocess.run(["git", "-C", str(dest), "pull", "--ff-only"], check=True)
+            git(['git', '-C', str(dest), 'remote', 'set-url', 'origin', source], 30)
+            ref = options.git_branch or 'HEAD'
+            git(['git', '-C', str(dest), 'fetch', '--depth', '1', 'origin', ref], 300)
+            git(['git', '-C', str(dest), 'checkout', '--detach', 'FETCH_HEAD'], 60)
         else:
-            if dest.exists():
-                shutil.rmtree(dest)
-            subprocess.run(["git", "clone", "--depth", "1", source, str(dest)], check=True)
-    elif source and Path(source).exists() and Path(source).resolve() != dest:
+            if dest.exists() and any(dest.iterdir()):
+                raise DeployError('Workspace не пуст и не является Git-репозиторием; исходники не перезаписаны')
+            branch = ['--branch', options.git_branch] if options.git_branch else []
+            git(["git", "clone", "--depth", "1", *branch, source, str(dest)], 300)
+    elif source and not Path(source).is_dir():
+        raise DeployError('Указанная папка исходников не найдена')
+    elif source and Path(source).resolve() != dest:
         # source — локальная папка: копируем содержимое в workspace.
-        if dest.exists():
-            shutil.rmtree(dest)
-        shutil.copytree(source, dest, ignore=shutil.ignore_patterns(
-            ".git", "node_modules", "dist", "__pycache__", "*.db", "backups"
-        ))
+        src = Path(source).resolve()
+        if src.is_relative_to(dest.resolve()) or dest.resolve().is_relative_to(src):
+            raise DeployError('Источник и workspace не должны содержать друг друга')
+        context, dockerfile = build_paths(src, options)
+        if not context.is_dir() or not dockerfile.is_file():
+            raise DeployError('В исходной папке не найден контекст сборки или Dockerfile')
+        suffix = secrets.token_hex(6)
+        incoming, backup = ws / f'.{slug}-incoming-{suffix}', ws / f'.{slug}-backup-{suffix}'
+        installed = False
+        try:
+            shutil.copytree(src, incoming, ignore=shutil.ignore_patterns(
+                '.git', 'node_modules', 'dist', '__pycache__', '*.db', 'backups'
+            ))
+            if dest.exists(): dest.rename(backup)
+            try:
+                incoming.rename(dest)
+                installed = True
+            except Exception:
+                if backup.exists() and not dest.exists(): backup.rename(dest)
+                raise
+        finally:
+            for temporary in (incoming, *([backup] if installed else [])):
+                if temporary.exists():
+                    if temporary.resolve().parent != ws or temporary.is_symlink():
+                        raise DeployError('Временный путь вышел за пределы workspace')
+                    shutil.rmtree(temporary)
 
     if not dest.exists():
         raise DeployError(
             f"Исходники не найдены: ни git-URL, ни папка {dest}. "
             f"Передайте source (git-URL) или залейте код в workspaces/{slug}."
         )
-    if not (dest / "Dockerfile").exists():
-        raise DeployError(f"В {dest} нет Dockerfile — нарушен контракт гостя.")
     return dest
+
+
+def source_revision(context: Path) -> str | None:
+    if not (context / '.git').exists():
+        return None
+    result = subprocess.run(['git', '-C', str(context), 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=10, check=True)
+    revision = result.stdout.strip()
+    return revision if re.fullmatch(r'[0-9a-f]{40,64}', revision) else None
 
 
 # ── Сборка образа ────────────────────────────────────────────────────────────
 
-def build_image(slug: str, context_dir: Path) -> str:
-    _, _, image_tag, _ = _names(slug)
+def build_image(slug: str, context_dir: Path, options: DeployOptions | None = None, *, image_tag: str | None = None, log=None) -> str:
+    image_tag = image_tag or _names(slug)[2]
+    options = options or DeployOptions()
     try:
-        # low-level build, чтобы поток логов можно было пробросить позже.
-        client().images.build(path=str(context_dir), tag=image_tag, rm=True, pull=False)
+        context, dockerfile = build_paths(context_dir, options)
+        if not context.is_dir() or not dockerfile.is_file():
+            raise DeployError('Контекст сборки или Dockerfile не найден')
+        if log is None:
+            client().images.build(path=str(context), dockerfile=options.dockerfile, tag=image_tag, rm=True, pull=options.pull_base_image, nocache=options.no_cache)
+        else:
+            stream = client().api.build(path=str(context), dockerfile=options.dockerfile, tag=image_tag,
+                rm=True, pull=options.pull_base_image, nocache=options.no_cache, decode=True)
+            try:
+                for event in stream:
+                    if event.get('stream'): log(event['stream'])
+                    if event.get('status'):
+                        log(f"{event.get('id', '')} {event['status']}\n")
+                    error = event.get('error') or (event.get('errorDetail') or {}).get('message')
+                    if error:
+                        log(str(error) + '\n')
+                        raise DeployError(str(error))
+            finally:
+                if hasattr(stream, 'close'): stream.close()
+
     except (APIError, Exception) as exc:  # noqa: BLE001
         raise DeployError(f"docker build упал: {exc}") from exc
     return image_tag
+
+
+def remove_release_image(slug: str, image_tag: str | None) -> None:
+    """Only panel release tags, without force-removing images used by containers."""
+    if not image_tag or not re.fullmatch(r'awwwdde/' + re.escape(slug) + r':release-\d+', image_tag):
+        return
+    try:
+        client().images.remove(image_tag, force=False)
+    except ImageNotFound:
+        pass
 
 
 # ── Postgres гостя ───────────────────────────────────────────────────────────
@@ -190,6 +262,9 @@ def run_app(
     secret_key: str,
     jwt_secret: str,
     extra_env: dict[str, str] | None = None,
+    options: DeployOptions | None = None,
+    container_name: str | None = None,
+    release_id: int | None = None,
 ) -> str:
     """Поднять app-контейнер гостя.
 
@@ -199,7 +274,8 @@ def run_app(
     перебивать дефолты** — это намеренно (например, если кто-то хочет
     зафиксировать свой PUBLIC_SITE_URL).
     """
-    app_container, _, _, _ = _names(slug)
+    app_container = container_name or _names(slug)[0]
+    options = options or DeployOptions()
     _remove_container(app_container)  # пересоздаём начисто на каждый деплой
 
     environment: dict[str, str] = {
@@ -211,42 +287,79 @@ def run_app(
         "SECRET_KEY": secret_key,
         "JWT_SECRET": jwt_secret,
     }
+    if not options.database_enabled:
+        environment.pop('DATABASE_URL', None)
     if extra_env:
         environment.update(extra_env)
+    if options.app_port is not None:
+        environment['PORT'] = str(options.app_port)
+    runtime: dict = {}
+    if release_id is not None:
+        runtime['labels'] = {'awwwdde.project': slug, 'awwwdde.release': str(release_id)}
+    if options.memory_mb is not None: runtime['mem_limit'] = f'{options.memory_mb}m'
+    if options.cpus is not None: runtime['nano_cpus'] = int(options.cpus * 1_000_000_000)
+    if options.pids_limit is not None: runtime['pids_limit'] = options.pids_limit
+    if options.start_command: runtime['command'] = options.start_command
+    from docker.types import LogConfig
+    runtime['log_config'] = LogConfig(type='json-file', config={'max-size': '10m', 'max-file': '3'})
 
     client().containers.run(
         image=image_tag,
         name=app_container,
         detach=True,
-        restart_policy={"Name": "unless-stopped"},
+        restart_policy={"Name": options.restart_policy},
         network=settings.docker_network,
         environment=environment,
+        **runtime,
     )
     return app_container
 
 
-def wait_healthy(slug: str, timeout: int = 120) -> None:
-    """Ждём, пока app начнёт отвечать 200 на /healthz (изнутри сети)."""
-    app_container, _, _, _ = _names(slug)
-    deadline = time.time() + timeout
-    last = ""
-    while time.time() < deadline:
+def wait_healthy(slug: str, timeout: int | None = None, options: DeployOptions | None = None, *, container_name: str | None = None, log=None) -> None:
+    """Check the actual HTTP status; a redirect or HTML error is not readiness."""
+    options = options or DeployOptions()
+    timeout = timeout or options.health_timeout
+    app_container = container_name or _names(slug)[0]
+    deadline = time.monotonic() + timeout
+    url = shlex.quote(f'http://127.0.0.1:{options.app_port or settings.guest_app_port}{options.health_path}')
+    probe = f"if command -v curl >/dev/null 2>&1; then printf 'HTTP_CODE='; curl -sS -o /dev/null --max-time 5 -w '%{{http_code}}' {url}; else wget -S -O /dev/null -T 5 {url} 2>&1; fi"
+    last = ''
+    previous_probe = None
+    previous_output = ''
+    while time.monotonic() < deadline:
         try:
             c = client().containers.get(app_container)
-            if c.status == "exited":
-                logs = c.logs(tail=40).decode("utf-8", "replace")
-                raise DeployError(f"app-контейнер упал на старте:\n{logs}")
-            code, out = c.exec_run(
-                f"sh -c 'wget -qO- http://localhost:{settings.guest_app_port}/healthz "
-                f"|| curl -fsS http://localhost:{settings.guest_app_port}/healthz'"
-            )
-            last = out.decode("utf-8", "replace") if out else ""
-            if code == 0:
+            if c.status in ('exited', 'dead'):
+                raise DeployError('app-контейнер завершился до готовности; проверьте журнал приложения')
+            code, out = c.exec_run(['sh', '-c', probe])
+            text = out.decode('utf-8', 'replace') if out else ''
+            statuses = re.findall(r'HTTP_CODE=(\d{3})|HTTP/\S+\s+(\d{3})', text)
+            status = next((a or b for a, b in statuses), '')
+            last = f'HTTP {status}' if status else 'нет HTTP-ответа; в образе необходим curl или wget'
+            if code == 0 and status == str(options.health_status):
+                if log: log(f'Готовность: HTTP {status}. Проверка пройдена.\n')
                 return
         except NotFound:
-            pass
-        time.sleep(3)
-    raise DeployError(f"app {app_container} не прошёл healthcheck за {timeout}с. {last}")
+            last = 'контейнер не найден'
+        if log:
+            if last != previous_probe:
+                log(f'Готовность: {last}\n'); previous_probe = last
+            try:
+                output = app_logs(slug, tail=120, container_name=app_container)
+                if output and not output.startswith('(контейнер'):
+                    if output.startswith(previous_output):
+                        log(output[len(previous_output):])
+                    elif output != previous_output:
+                        # Tail shifted: only the suffix after the longest overlap.
+                        old_lines, new_lines = previous_output.splitlines(keepends=True), output.splitlines(keepends=True)
+                        overlap = next((n for n in range(min(len(old_lines), len(new_lines)), 0, -1) if old_lines[-n:] == new_lines[:n]), 0)
+                        log(''.join(new_lines[overlap:]))
+                    previous_output = output
+            except Exception:
+                pass
+        remaining = deadline - time.monotonic()
+        if remaining > 0: time.sleep(min(options.health_interval, remaining))
+    raise DeployError(f'app {app_container} не прошёл проверку за {timeout}с: {last}')
 
 
 # ── Высокоуровневые операции ─────────────────────────────────────────────────
@@ -260,8 +373,9 @@ def gen_secret() -> str:
     return secrets.token_urlsafe(48)
 
 
-def stop_project(slug: str) -> None:
+def stop_project(slug: str, *, container_name: str | None = None) -> None:
     app_container, db_container, _, _ = _names(slug)
+    app_container = container_name or app_container
     for name in (app_container, db_container):
         try:
             client().containers.get(name).stop()
@@ -269,19 +383,24 @@ def stop_project(slug: str) -> None:
             pass
 
 
-def start_project(slug: str) -> None:
+def start_project(slug: str, *, database_enabled: bool = True, container_name: str | None = None) -> None:
     app_container, db_container, _, _ = _names(slug)
-    for name in (db_container, app_container):
+    app_container = container_name or app_container
+    for name in ((db_container, app_container) if database_enabled else (app_container,)):
         try:
             client().containers.get(name).start()
         except NotFound:
             pass
 
 
-def destroy_project(slug: str, *, drop_data: bool = False) -> None:
+def destroy_project(slug: str, *, drop_data: bool = False, release_ids: list[int] | None = None) -> None:
     """Снести контейнеры (и образ). drop_data=True — ещё и volume БД."""
     app_container, db_container, image_tag, db_volume = _names(slug)
     _remove_container(app_container)
+    for container in client().containers.list(all=True, filters={'label': f'awwwdde.project={slug}'}):
+        container.remove(force=True)
+    for release_id in release_ids or []:
+        remove_release_image(slug, f'awwwdde/{slug}:release-{release_id}')
     _remove_container(db_container)
     try:
         client().images.remove(image_tag, force=True)
@@ -294,8 +413,9 @@ def destroy_project(slug: str, *, drop_data: bool = False) -> None:
             pass
 
 
-def app_logs(slug: str, tail: int = 200) -> str:
+def app_logs(slug: str, tail: int = 200, *, container_name: str | None = None) -> str:
     app_container, _, _, _ = _names(slug)
+    app_container = container_name or app_container
     try:
         return client().containers.get(app_container).logs(tail=tail).decode(
             "utf-8", "replace"
